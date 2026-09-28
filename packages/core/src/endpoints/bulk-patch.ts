@@ -1,8 +1,13 @@
 import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { getManagedInputExclusions } from '../core/managed-fields';
-import type { HookMode, ListFilters, MetaInput, OpenAPIRouteSchema } from '../core/types';
-import type { InferModelRow } from '../core/types';
+import type {
+  HookMode,
+  InferModelRow,
+  ListFilters,
+  MetaInput,
+  OpenAPIRouteSchema,
+} from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import type { ListFilterParseOptions, ModelObject } from './types';
@@ -250,12 +255,18 @@ export abstract class BulkPatchEndpoint<
     // Mutation changes which rows a cached list/read would return.
     await this.invalidateModelCache();
 
+    // Returned rows run the shared finalize chain, like every other verb's.
+    const records =
+      this.returnRecords && bulkResult.records
+        ? await this.finalizeArray(bulkResult.records)
+        : undefined;
+
     return this.json({
       success: true,
       matched: bulkResult.matched,
       updated: bulkResult.updated,
       dryRun: false,
-      ...(this.returnRecords && bulkResult.records ? { records: bulkResult.records } : {}),
+      ...(records ? { records } : {}),
     });
   }
 }

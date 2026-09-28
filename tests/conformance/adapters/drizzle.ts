@@ -97,6 +97,7 @@ const itemsTable = sqliteTable('conformance_items', {
   age: integer('age'),
   tenantId: text('tenantId'),
   parentId: text('parentId'),
+  version: integer('version'),
   deletedAt: text('deletedAt'),
   createdAt: integer('createdAt'),
   updatedAt: integer('updatedAt'),
@@ -181,9 +182,11 @@ const tenantMeta = defineMeta({ model: tenantModel });
 // The finalize model leaves the leg's tenant column out of its schema, and its
 // create verbs stamp it on insert: the row carries a server-only column the
 // schema never declares, which no response may echo (the finalize cell).
-const finalizeSchema = schema.omit({ tenantId: true });
+// `version` starts at 1 so version snapshots are numbered from 1.
+const finalizeSchema = schema.omit({ tenantId: true }).extend({ version: z.number().default(1) });
 type FinalizeItem = z.infer<typeof finalizeSchema>;
 const SERVER_ONLY_VALUE = 'tenant-a';
+const SERVER_ONLY_UPDATED = 'tenant-b';
 
 const finalizeModel = defineModel({
   tableName: TABLE,
@@ -193,6 +196,7 @@ const finalizeModel = defineModel({
   softDelete: { field: 'deletedAt' },
   timestamps: true,
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  versioning: { field: 'version' },
   relations: {
     parent: {
       type: 'belongsTo',
@@ -378,6 +382,7 @@ class FinalizeCreate extends DrizzleCreateEndpoint {
 class FinalizeRead extends DrizzleReadEndpoint {
   _meta = finalizeMeta;
   db = DB;
+  protected override etagEnabled = true;
 
   protected override allowedIncludes = ['parent'];
 }
@@ -405,6 +410,44 @@ class FinalizeBatchUpsert extends DrizzleBatchUpsertEndpoint {
   _meta = finalizeMeta;
   db = DB;
   protected override upsertKeys = ['email'];
+}
+// Updates stamp a different server-only value, so version snapshots and their
+// `changes` carry a column the schema never declares (the version cell).
+class FinalizeUpdate extends DrizzleUpdateEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+  protected override etagEnabled = true;
+
+  override async before(data: Partial<FinalizeItem>): Promise<Partial<FinalizeItem>> {
+    return { ...data, tenantId: SERVER_ONLY_UPDATED } as Partial<FinalizeItem>;
+  }
+}
+class FinalizeVersionHistory extends DrizzleVersionHistoryEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+}
+class FinalizeVersionRead extends DrizzleVersionReadEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+}
+class FinalizeVersionCompare extends DrizzleVersionCompareEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+}
+class FinalizeVersionRollback extends DrizzleVersionRollbackEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+}
+class FinalizeImport extends DrizzleImportEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+  protected override upsertKeys = ['email'];
+}
+class FinalizeBulkPatch extends DrizzleBulkPatchEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+  protected override filterFields = ['email'];
+  protected override returnRecords = true;
 }
 
 // Encryption endpoint classes — every write/returning verb on the enc model.
@@ -632,6 +675,7 @@ async function setup(): Promise<AdapterContext> {
       age INTEGER,
       tenantId TEXT,
       parentId TEXT,
+      version INTEGER,
       deletedAt TEXT,
       createdAt INTEGER,
       updatedAt INTEGER
@@ -748,6 +792,13 @@ async function setup(): Promise<AdapterContext> {
     batchDelete: FinalizeBatchDelete,
     export: FinalizeExport,
     batchUpsert: FinalizeBatchUpsert,
+    import: FinalizeImport,
+    bulkPatch: FinalizeBulkPatch,
+    update: FinalizeUpdate,
+    versionHistory: FinalizeVersionHistory,
+    versionRead: FinalizeVersionRead,
+    versionCompare: FinalizeVersionCompare,
+    versionRollback: FinalizeVersionRollback,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });
@@ -839,6 +890,7 @@ export const drizzleConformance: AdapterDescriptor = {
     // Drizzle bulk-patch returns the patched rows (returnRecords = true on the
     // enc leg), so decrypt-on-return and per-record `bulk_patched` events work.
     bulkPatchReturnsRecords: true,
+    versionHistory: true,
   },
   tenant: {
     field: 'tenantId',

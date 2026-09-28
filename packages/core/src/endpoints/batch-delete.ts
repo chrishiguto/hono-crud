@@ -1,7 +1,6 @@
 import type { Env } from 'hono';
 import type { ZodObject, ZodRawShape } from 'zod';
-import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
-import type { InferModelRow } from '../core/types';
+import type { HookMode, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import {
   batchResultResponses,

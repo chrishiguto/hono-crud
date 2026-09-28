@@ -341,9 +341,10 @@ export abstract class ListEndpoint<
     const cacheActive = this.isResponseCacheActive();
     const cacheTenantId = cacheActive ? this.getTenantId() : undefined;
     if (cacheActive) {
+      // The cache holds the finalized response, not stored rows.
       const cached = await readEndpointCache<{
-        result: InferModelRow<M['model']>[];
-        result_info: PaginatedResult<InferModelRow<M['model']>>['result_info'];
+        result: unknown[];
+        result_info: PaginatedResult<unknown>['result_info'];
       }>(this as unknown as CacheableEndpoint, cacheTenantId);
       if (cached) {
         const hit = this.successPaginated(cached.result, cached.result_info);

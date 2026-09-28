@@ -6,13 +6,13 @@ import { getNestedWritableRelations, isDirectNestedData } from '../core/nested-w
 import { applyUpsertRestore } from '../core/soft-delete';
 import type {
   HookMode,
+  InferModelRow,
   MetaInput,
   NestedUpdateInput,
   NestedWriteResult,
   OpenAPIRouteSchema,
   RelationConfig,
 } from '../core/types';
-import type { InferModelRow } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';

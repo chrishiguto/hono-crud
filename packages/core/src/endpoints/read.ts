@@ -237,7 +237,8 @@ export abstract class ReadEndpoint<
     // (unless cachePerUser) so one user's view can't leak to another.
     const cacheActive = this.isResponseCacheActive();
     if (cacheActive) {
-      const cached = await readEndpointCache<InferModelRow<M['model']>>(
+      // The cache holds the finalized response, not a stored row.
+      const cached = await readEndpointCache<unknown>(
         this as unknown as CacheableEndpoint,
         tenantId,
       );

@@ -22,6 +22,7 @@ import {
   type ConformanceRecord,
   type CtxGetter,
   createRecord,
+  expectError,
   expectList,
   expectSuccess,
   jsonInit,
@@ -178,5 +179,130 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
     );
     expect(read.parent?.name).toBe('Parent Renamed');
     expect(serverOnlyField in (read.parent as ConformanceRecord)).toBe(false);
+  });
+
+  test('finalize pipeline: import and bulkPatch responses run the same chain', async () => {
+    const { app } = ctx();
+    const email = 'projection-import@conformance.test';
+    await createRecord(app, '/finalize-items', { name: 'Seed', email, role: 'user', age: 41 });
+
+    // import (upsert mode) updates the stamped row and echoes it per result row.
+    const imported = await app.request(
+      '/finalize-items/import?mode=upsert',
+      jsonInit('POST', { items: [{ name: 'Imported', email, role: 'user' }] }),
+    );
+    expect(imported.status).toBe(200);
+    const importBody = await readJson<{
+      success: true;
+      result: { results: Array<{ status: string; data?: ConformanceRecord }> };
+    }>(imported);
+    expect(importBody.result.results[0]!.status).toBe('updated');
+    expectFinalized(importBody.result.results[0]!.data!, 'Imported');
+
+    // bulkPatch returns the patched rows where the adapter surfaces them;
+    // prisma's count-only updateMany returns none (`bulkPatchReturnsRecords`).
+    const patched = await app.request(
+      `/finalize-items/bulk?email=${encodeURIComponent(email)}`,
+      jsonInit('PATCH', { name: 'Patched' }),
+    );
+    expect(patched.status).toBe(200);
+    const patchBody = await readJson<{ updated: number; records?: ConformanceRecord[] }>(patched);
+    expect(patchBody.updated).toBe(1);
+    if (descriptor.capabilities.bulkPatchReturnsRecords) {
+      expect(patchBody.records).toHaveLength(1);
+      expectFinalized(patchBody.records![0]!, 'Patched');
+    } else {
+      expect(patchBody.records).toBeUndefined();
+    }
+  });
+
+  test('finalize pipeline: the ETag a read returns satisfies If-Match on update', async () => {
+    const { app } = ctx();
+    // The response differs from the stored row (computed field added, profiled
+    // field and server-only column dropped), so the If-Match check has to hash
+    // the finalized representation the client saw, not the row.
+    const created = await createRecord(app, '/finalize-items', {
+      name: 'Tagged',
+      email: 'projection-etag@conformance.test',
+      role: 'user',
+      age: 22,
+    });
+    const read = await app.request(`/finalize-items/${created.id}`);
+    expect(read.status).toBe(200);
+    const etag = read.headers.get('ETag');
+    expect(etag).toBeTruthy();
+
+    const current = await app.request(
+      `/finalize-items/${created.id}`,
+      jsonInit('PATCH', { name: 'Tagged Two' }, { 'If-Match': etag! }),
+    );
+    expect(current.status).toBe(200);
+
+    await expectError(
+      await app.request(
+        `/finalize-items/${created.id}`,
+        jsonInit('PATCH', { name: 'Tagged Three' }, { 'If-Match': etag! }),
+      ),
+      409,
+      'CONFLICT',
+    );
+  });
+
+  if (!descriptor.capabilities.versionHistory) {
+    test.skip(`finalize projection: version verbs [skipped: ${descriptor.name} mounts no version verbs on its finalize model]`, () => {});
+    return;
+  }
+
+  test('finalize projection: version history, read, compare and rollback never echo a column the schema leaves out', async () => {
+    const { app } = ctx();
+    const created = await createRecord(app, '/finalize-items', {
+      name: 'Versioned',
+      email: 'projection-version@conformance.test',
+      role: 'user',
+      age: 30,
+    });
+    // Each update snapshots the row as it was: version 1 carries the create's
+    // server-only value, version 2 the value the first update stamped, so the
+    // two snapshots differ in that column as well as in `name`.
+    for (const name of ['Versioned Two', 'Versioned Three']) {
+      const updated = await app.request(
+        `/finalize-items/${created.id}`,
+        jsonInit('PATCH', { name }),
+      );
+      expect(updated.status).toBe(200);
+    }
+
+    type Entry = { data: ConformanceRecord; changes?: Array<{ field: string }> };
+    const history = await expectSuccess<{ versions: Entry[] }>(
+      await app.request(`/finalize-items/${created.id}/versions`),
+      200,
+    );
+    expect(history.versions.length).toBeGreaterThan(0);
+    for (const entry of history.versions) {
+      expect(serverOnlyField in entry.data).toBe(false);
+      for (const change of entry.changes ?? []) expect(change.field).not.toBe(serverOnlyField);
+    }
+
+    const version = await expectSuccess<Entry>(
+      await app.request(`/finalize-items/${created.id}/versions/1`),
+      200,
+    );
+    expect(version.data.name).toBe('Versioned');
+    expect(serverOnlyField in version.data).toBe(false);
+
+    const compare = await expectSuccess<{ changes: Array<{ field: string }> }>(
+      await app.request(`/finalize-items/${created.id}/versions/compare?from=1&to=2`),
+      200,
+    );
+    const compared = compare.changes.map((c) => c.field);
+    expect(compared).toContain('name');
+    expect(compared).not.toContain(serverOnlyField);
+
+    // Rollback runs the full finalize chain: computed field in, profiled field out.
+    const rollback = await expectSuccess<ConformanceRecord>(
+      await app.request(`/finalize-items/${created.id}/versions/1/rollback`, { method: 'POST' }),
+      200,
+    );
+    expectFinalized(rollback, 'Versioned');
   });
 }

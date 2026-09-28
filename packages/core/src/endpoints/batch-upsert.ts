@@ -1,11 +1,9 @@
 import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
-import { applyComputedFields } from '../core/computed-fields';
 import { getLogger } from '../core/logger';
 import { getManagedInputExclusions, rethrowAsConstraintError } from '../core/managed-fields';
 import { applyUpsertRestore } from '../core/soft-delete';
-import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
-import type { InferModelRow } from '../core/types';
+import type { HookMode, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';
@@ -522,20 +520,14 @@ export abstract class BatchUpsertEndpoint<
     // Apply afterBatch hook
     result = await this.afterBatch(result);
 
-    // Apply computed fields if defined (const capture carries the narrowing
-    // into the async map closure — the deep property access would not).
-    const computedFields = this._meta.model.computedFields;
-    if (computedFields) {
-      result.items = await Promise.all(
-        result.items.map(async (item) => ({
-          ...item,
-          data: (await applyComputedFields(
-            item.data as Record<string, unknown>,
-            computedFields,
-          )) as InferModelRow<M['model']>,
-        })),
-      );
-    }
+    // Computed fields go on before audit + events (which carry them); the rest
+    // of the finalize chain runs on the response below.
+    result.items = await Promise.all(
+      result.items.map(async (item) => ({
+        ...item,
+        data: await this.withComputedFields(item.data),
+      })),
+    );
 
     // Audit logging
     this.logBatchAudit(
@@ -559,25 +551,16 @@ export abstract class BatchUpsertEndpoint<
       );
     }
 
-    // serializer → projection → profile → transform per item (computed already
-    // applied above) — the finalize chain's order, so a column the schema leaves
-    // out never reaches the response here either.
-    result.items = result.items.map((item) => {
-      const serialized = this._meta.model.serializer
-        ? this._meta.model.serializer(item.data)
-        : item.data;
-      const profiled = this.applyProfile(
-        this.projectResponse(serialized) as Record<string, unknown>,
-      );
-      return {
-        ...item,
-        data: this.transform(profiled) as InferModelRow<M['model']>,
-      };
-    });
+    // The rest of the finalize chain (computed fields already applied above).
+    const shaped = this.shapeArray(result.items.map((item) => item.data));
+    const response: BatchUpsertResult<unknown> = {
+      ...result,
+      items: result.items.map((item, i) => ({ ...item, data: shaped[i] })),
+    };
 
     // Mutation changes which rows a cached list/read would return.
     await this.invalidateModelCache();
 
-    return this.success(result);
+    return this.success(response);
   }
 }

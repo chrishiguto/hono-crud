@@ -46,6 +46,7 @@ import type {
   FieldsOf,
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationNamesOf,
@@ -53,7 +54,6 @@ import type {
   SortDirection,
 } from '../core/types';
 import type { FilterConfig } from '../core/types';
-import type { InferModelRow } from '../core/types';
 import type { BatchUpsertResult } from '../endpoints/batch-upsert';
 import type {
   AggregateExtras,

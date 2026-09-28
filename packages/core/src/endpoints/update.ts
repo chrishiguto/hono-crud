@@ -7,13 +7,13 @@ import { getNestedWritableRelations, isDirectNestedData } from '../core/nested-w
 import type {
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   NestedUpdateInput,
   NestedWriteResult,
   OpenAPIRouteSchema,
   RelationConfig,
 } from '../core/types';
-import type { InferModelRow } from '../core/types';
 import { generateETag, matchesIfMatch } from '../utils/etag';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
@@ -406,11 +406,17 @@ export abstract class UpdateEndpoint<
       await this.applyWritePolicy(previousRecord);
     }
 
-    // ETag: Check If-Match for optimistic concurrency control
+    // ETag: Check If-Match for optimistic concurrency control. The client's
+    // ETag came from a read response, so hash the same representation —
+    // decrypted and finalized — not the stored row, which can carry columns,
+    // ciphertext or pre-serializer values the response never showed.
     if (this.etagEnabled && previousRecord) {
       const ifMatch = this.getContext().req.header('If-Match');
       if (ifMatch) {
-        const currentEtag = await generateETag(previousRecord);
+        const decrypted = (await this.decryptOnRead(
+          previousRecord as Record<string, unknown>,
+        )) as InferModelRow<M['model']>;
+        const currentEtag = await generateETag(await this.finalizeRecord(decrypted));
         if (!matchesIfMatch(ifMatch, currentEtag)) {
           return this.error('Resource has been modified by another request', 'CONFLICT', 409);
         }

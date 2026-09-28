@@ -816,9 +816,14 @@ export abstract class ImportEndpoint<
       );
     }
 
-    const importResult: ImportResult<InferModelRow<M['model']>> = {
+    // Imported rows run the shared finalize chain, like every other verb's.
+    const importResult: ImportResult<unknown> = {
       summary,
-      results,
+      results: await Promise.all(
+        results.map(async (row) =>
+          row.data ? { ...row, data: await this.finalizeRecord(row.data) } : row,
+        ),
+      ),
     };
 
     // Return 207 Multi-Status if there were partial failures

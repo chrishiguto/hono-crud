@@ -6,11 +6,11 @@ import type {
   CascadeAction,
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationConfig,
 } from '../core/types';
-import type { InferModelRow } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 

@@ -1,10 +1,10 @@
 import type { Env } from 'hono';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
-import type { ListFilters, MetaInput, OpenAPIRouteSchema } from '../core/types';
-import type { InferModelRow } from '../core/types';
+import type { InferModelRow, ListFilters, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { type CsvGenerateOptions, escapeCsvValue, generateCsv } from '../utils/csv';
 import { ListEndpoint } from './list';
+import { pickFields } from './projection';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 
 // ============================================================================
@@ -180,16 +180,9 @@ export abstract class ExportEndpoint<
   protected prepareRecordsForExport(
     records: InferModelRow<M['model']>[],
   ): Record<string, unknown>[] {
-    const { fields } = this.getResponseProjection();
-    return records.map((record) => {
-      const filtered: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(record as Record<string, unknown>)) {
-        if (fields.has(key) && !this.excludedExportFields.includes(key)) {
-          filtered[key] = value;
-        }
-      }
-      return filtered;
-    });
+    const fields = new Set(this.getResponseProjection().fields);
+    for (const excluded of this.excludedExportFields) fields.delete(excluded);
+    return records.map((record) => pickFields(record as Record<string, unknown>, fields));
   }
 
   /**

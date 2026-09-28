@@ -6,8 +6,7 @@ import {
   rethrowAsConstraintError,
   stripManagedInsertFields,
 } from '../core/managed-fields';
-import type { MetaInput, OpenAPIRouteSchema } from '../core/types';
-import type { InferModelRow } from '../core/types';
+import type { InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';

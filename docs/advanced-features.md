@@ -656,8 +656,14 @@ back to the schema type.
   relations, and managed timestamp / soft-delete / version columns) after the
   serializer runs, so an undeclared column never reaches the client — even when
   a serializer spreads the row. `transform` receives that projected shape. The
-  same rule covers export, version snapshots and diffs, and `?include=` rows of
-  a relation that declares a `schema`.
+  same rule covers import results, bulk-patch `records`, export, version
+  snapshots and diffs, and `?include=` rows of a relation that declares a
+  `schema` (projected onto that schema alone).
+- Events and `after` hooks still carry the row, so a subscriber can read a
+  server-only column. The SSE subscribe handler strips only its `excludeFields`
+  and does not project.
+- `If-Match` on update is checked against the same finalized representation a
+  read's `ETag` is computed from.
 
 ```typescript
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';

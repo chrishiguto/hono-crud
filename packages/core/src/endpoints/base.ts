@@ -24,7 +24,7 @@ import {
   invalidateEndpointCache,
   warnCacheSkippedForPolicy,
 } from '../core/cache';
-import { applyComputedFields, applyComputedFieldsToArray } from '../core/computed-fields';
+import { applyComputedFields } from '../core/computed-fields';
 import { CONTEXT_KEYS } from '../core/context-keys';
 import { ApiException, ForbiddenException, InputValidationException } from '../core/exceptions';
 import {
@@ -61,11 +61,12 @@ import { decryptFields, encryptFields } from '../encryption/crypto';
 import { type CrudEventEmitter, resolveEventEmitter } from '../events/emitter';
 import type { CrudEventType } from '../events/types';
 import { extractTenantId, getMultiTenantConfig } from '../multi-tenant/config';
-import { applyProfile, applyProfileToArray } from '../serialization/serialize';
+import { applyProfile } from '../serialization/serialize';
 import { getContextVar, setContextVar } from '../utils/context';
 import { type VersionManager, createVersionManager } from '../versioning';
 import { getVersioningConfig } from '../versioning/config';
-import { type FieldSelection, applyFieldSelection, applyFieldSelectionToArray } from './types';
+import { type ResponseProjection, projectRecord } from './projection';
+import { type FieldSelection, applyFieldSelection } from './types';
 
 /**
  * Per-request memoization key for `Model.resolveSchema(ctx)` results.
@@ -87,49 +88,7 @@ type SchemaOf<M extends MetaInput> = M['model']['schema'];
  * adapter read, which `policies` callbacks, `after` hooks and the serializer
  * receive. Can be wider than the schema.
  */
-type RowOf<M extends MetaInput> = InferModelRow<M['model']>;
-
-/**
- * The keys a response record may carry, and for each included relation that
- * declares a `schema`, the keys its related rows may carry.
- */
-interface ResponseProjection {
-  fields: ReadonlySet<string>;
-  relations: ReadonlyMap<string, ReadonlySet<string>>;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function pickFields(value: unknown, fields: ReadonlySet<string>): unknown {
-  if (!isPlainRecord(value)) return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, field] of Object.entries(value)) {
-    if (fields.has(key)) out[key] = field;
-  }
-  return out;
-}
-
-/**
- * Keep only the projection's keys on a plain-object record, and project each
- * included relation's rows onto its schema. Anything that is not a plain
- * object (a serializer that returns a string, an array) passes through.
- */
-function projectRecord(value: unknown, projection: ResponseProjection): unknown {
-  if (!isPlainRecord(value)) return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, field] of Object.entries(value)) {
-    if (!projection.fields.has(key)) continue;
-    const related = projection.relations.get(key);
-    out[key] = !related
-      ? field
-      : Array.isArray(field)
-        ? field.map((row) => pickFields(row, related))
-        : pickFields(field, related);
-  }
-  return out;
-}
+type Row<M extends MetaInput> = InferModelRow<M['model']>;
 
 /**
  * Type predicate: does `o` expose a `getBodySchema()` method? Endpoints
@@ -610,17 +569,6 @@ export abstract class CrudEndpoint<
     return profile ? applyProfile(record, profile) : record;
   }
 
-  /**
-   * Apply the model's default serialization profile to an array of records.
-   * Returns the array unchanged when no profile is configured.
-   */
-  protected applyProfileToArray<T extends Record<string, unknown>>(
-    records: T[],
-  ): Record<string, unknown>[] {
-    const profile = this._meta.model.serializationProfile;
-    return profile ? applyProfileToArray(records, profile) : records;
-  }
-
   // ============================================================================
   // Read-shaping pipeline
   // ============================================================================
@@ -628,14 +576,18 @@ export abstract class CrudEndpoint<
   /**
    * Per-record output transform. Default is identity; concrete endpoints (and
    * the generated config/builder subclasses) override it. Declared here so the
-   * shared `finalizeRecord` / `finalizeArray` tail can call it polymorphically.
+   * shared `finalizeRecord` / `finalizeArray` chain can call it polymorphically.
+   *
+   * Runs after the serializer, the projection and the serialization profile,
+   * so it receives the public shape (the verbs type it as `ModelObject`). A
+   * serializer that returns a non-object value reaches it unchanged.
    */
   protected transform(item: unknown): unknown {
     return item;
   }
 
   /**
-   * Deterministic read-shaping tail shared by every record-returning verb:
+   * Deterministic read-shaping chain shared by every record-returning verb:
    * `computed fields → serializer → projection → serialization profile →
    * transform → field selection`. Each optional step runs only when the
    * model/endpoint configured it; the projection always runs. This is the
@@ -650,53 +602,59 @@ export abstract class CrudEndpoint<
    * row. `transform` therefore receives the public shape.
    *
    * `decrypt`, policy reads, and the user `after` hook stay in each verb's
-   * `handle()` — they aren't uniform across verbs and run before this tail.
+   * `handle()` — they aren't uniform across verbs and run before this chain.
    */
   protected async finalizeRecord(
-    record: RowOf<M>,
+    record: Row<M>,
     fieldSelection?: FieldSelection,
   ): Promise<unknown> {
-    const model = this._meta.model;
-    let obj: Record<string, unknown> = record as Record<string, unknown>;
-    if (model.computedFields) {
-      obj = await applyComputedFields(obj, model.computedFields);
-    }
-    const serialized = model.serializer ? model.serializer(obj as RowOf<M>) : obj;
-    const projected = projectRecord(serialized, this.getResponseProjection());
-    const profiled = this.applyProfile(projected as Record<string, unknown>);
-    const transformed = this.transform(profiled);
-    if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
-      return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
-    }
-    return transformed;
-  }
-
-  /**
-   * The finalize chain's projection step alone, for verbs that run their own
-   * serializer tail (batch upsert applies computed fields early, for events).
-   */
-  protected projectResponse(serialized: unknown): unknown {
-    return projectRecord(serialized, this.getResponseProjection());
+    const withComputed = await this.withComputedFields(record);
+    return this.shape(withComputed, this.getResponseProjection(), fieldSelection);
   }
 
   /** Array variant of {@link finalizeRecord}. Same ordered chain, per element. */
   protected async finalizeArray(
-    records: RowOf<M>[],
+    records: Row<M>[],
     fieldSelection?: FieldSelection,
   ): Promise<unknown[]> {
-    const model = this._meta.model;
-    let items: Record<string, unknown>[] = records as Record<string, unknown>[];
-    if (model.computedFields) {
-      items = await applyComputedFieldsToArray(items, model.computedFields);
-    }
-    const serializer = model.serializer;
-    const serialized = serializer ? items.map((i) => serializer(i as RowOf<M>)) : items;
+    const withComputed = await Promise.all(records.map((r) => this.withComputedFields(r)));
+    return this.shapeArray(withComputed, fieldSelection);
+  }
+
+  /**
+   * First step of the finalize chain: the model's computed fields added onto
+   * the row (the row itself when none are configured).
+   */
+  protected async withComputedFields(record: Row<M>): Promise<Row<M>> {
+    const computedFields = this._meta.model.computedFields;
+    if (!computedFields) return record;
+    return (await applyComputedFields(record as Record<string, unknown>, computedFields)) as Row<M>;
+  }
+
+  /**
+   * The finalize chain after computed fields, for rows that already carry
+   * them — batch upsert adds them early so its events see them. Every other
+   * verb calls {@link finalizeArray}.
+   */
+  protected shapeArray(records: Row<M>[], fieldSelection?: FieldSelection): unknown[] {
     const projection = this.getResponseProjection();
-    const projected = serialized.map((i) => projectRecord(i, projection));
-    const profiled = this.applyProfileToArray(projected as Record<string, unknown>[]);
-    const transformed = profiled.map((i) => this.transform(i));
+    return records.map((record) => this.shape(record, projection, fieldSelection));
+  }
+
+  /** `serializer → projection → profile → transform → field selection` on one row. */
+  private shape(
+    record: Row<M>,
+    projection: ResponseProjection,
+    fieldSelection?: FieldSelection,
+  ): unknown {
+    const serializer = this._meta.model.serializer;
+    const serialized = serializer ? serializer(record) : record;
+    const profiled = this.applyProfile(
+      projectRecord(serialized, projection) as Record<string, unknown>,
+    );
+    const transformed = this.transform(profiled);
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
-      return applyFieldSelectionToArray(transformed as Record<string, unknown>[], fieldSelection);
+      return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
     }
     return transformed;
   }
@@ -720,15 +678,15 @@ export abstract class CrudEndpoint<
    * (id read via `lookupField`) and keeps the original item.
    */
   protected async applyBatchAfterHooks(
-    items: RowOf<M>[],
+    items: Row<M>[],
     errors: Array<{ id: string; error: string }>,
     hooks: {
-      after: (item: RowOf<M>) => Promise<RowOf<M>>;
+      after: (item: Row<M>) => Promise<Row<M>>;
       afterHookMode: HookMode;
       stopOnError: boolean;
     },
-  ): Promise<RowOf<M>[]> {
-    const results: RowOf<M>[] = [];
+  ): Promise<Row<M>[]> {
+    const results: Row<M>[] = [];
     for (const item of items) {
       try {
         if (hooks.afterHookMode === 'fire-and-forget') {
@@ -757,7 +715,7 @@ export abstract class CrudEndpoint<
    */
   protected async finalizeBatchResponse(
     resultKey: 'updated' | 'deleted' | 'restored',
-    results: RowOf<M>[],
+    results: Row<M>[],
     notFound: string[],
     errors: Array<{ id: string; error: string }>,
   ): Promise<Response> {
@@ -826,6 +784,11 @@ export abstract class CrudEndpoint<
    * (`timestamps: true` with no `createdAt` in the schema). An included
    * relation that declares a `schema` has its rows projected onto it; one
    * without a schema documents no shape to project onto and passes through.
+   *
+   * Included rows keep only `relation.schema`'s keys, not the related model's
+   * managed columns: a relation names its model by table, so its timestamps /
+   * soft-delete / version config is not visible here. Declare those columns in
+   * the relation's schema to include them.
    */
   protected getResponseProjection(): ResponseProjection {
     const model = this._meta.model;
@@ -1041,18 +1004,18 @@ export abstract class CrudEndpoint<
    * when no policies are configured (endpoint behaviour is unchanged
    * from pre-0.7.0).
    */
-  protected getPolicies(): ModelPolicies<RowOf<M>> | undefined {
+  protected getPolicies(): ModelPolicies<Row<M>> | undefined {
     if (this.context) {
-      const fromCtx = getContextVar<ModelPolicies<RowOf<M>>>(this.context, POLICIES_CONTEXT_KEY);
+      const fromCtx = getContextVar<ModelPolicies<Row<M>>>(this.context, POLICIES_CONTEXT_KEY);
       if (fromCtx) return fromCtx;
     }
     // `ModelPolicies<X>` is invariant in X (X appears in both input and
     // output positions of `read`/`write`/`fields`), so the model's
-    // concrete row type doesn't satisfy `RowOf<M>` structurally — even
+    // concrete row type doesn't satisfy `Row<M>` structurally — even
     // when they're the same nominal type. The cast is honest at this
     // narrow boundary; downstream call sites in `applyRead*`/`applyWrite`
     // use the typed return without further casts.
-    return this._meta.model.policies as ModelPolicies<RowOf<M>> | undefined;
+    return this._meta.model.policies as ModelPolicies<Row<M>> | undefined;
   }
 
   // --- Response cache (config-driven) — shared across verbs -----------------
@@ -1141,10 +1104,10 @@ export abstract class CrudEndpoint<
    * the record if allowed, `null` otherwise. Field masking via
    * `policies.fields(...)` is also applied.
    *
-   * Typed against `RowOf<M>` so the policies' callbacks see the same row
+   * Typed against `Row<M>` so the policies' callbacks see the same row
    * shape as the model — no cast needed at the call site.
    */
-  protected async applyReadPolicy(record: RowOf<M>): Promise<RowOf<M> | null> {
+  protected async applyReadPolicy(record: Row<M>): Promise<Row<M> | null> {
     const policies = this.getPolicies();
     if (!policies) return record;
     const policyCtx = this.buildPolicyContext();
@@ -1166,10 +1129,10 @@ export abstract class CrudEndpoint<
    * Apply the policy `read` predicate to an array of records, dropping
    * disallowed entries and applying any field mask. Used by List endpoints.
    */
-  protected async applyReadPolicyToArray(records: RowOf<M>[]): Promise<RowOf<M>[]> {
+  protected async applyReadPolicyToArray(records: Row<M>[]): Promise<Row<M>[]> {
     const policies = this.getPolicies();
     if (!policies) return records;
-    const out: RowOf<M>[] = [];
+    const out: Row<M>[] = [];
     for (const record of records) {
       const masked = await this.applyReadPolicy(record);
       if (masked !== null) out.push(masked);
@@ -1181,7 +1144,7 @@ export abstract class CrudEndpoint<
    * Apply the policy `write` predicate (if any) to a record before mutation.
    * Throws `ForbiddenException` when the policy denies the write.
    */
-  protected async applyWritePolicy(record: RowOf<M>): Promise<void> {
+  protected async applyWritePolicy(record: Row<M>): Promise<void> {
     const policies = this.getPolicies();
     if (!policies?.write) return;
     const allowed = await policies.write(this.buildPolicyContext(), record);

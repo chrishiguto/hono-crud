@@ -971,6 +971,12 @@ export interface Model<
    * Optional serializer: turns the stored row into the response object.
    * Receives the row the adapter read, not the public schema — with a Drizzle
    * table that is `table.$inferSelect`, columns the schema omits included.
+   *
+   * The result is then projected onto the response fields (the schema's
+   * fields, computed fields, relations, managed timestamp / soft-delete /
+   * version columns), so a key outside them is dropped: spreading the row is
+   * safe, and a renamed key (`{ fileName: row.filename }`) needs to be declared
+   * in the schema to survive. A non-object result passes through unprojected.
    */
   serializer?: (row: RowOf<T, TTable>) => unknown;
   /**
@@ -1818,9 +1824,10 @@ export type InferModel<M extends Model> = z.infer<M['schema']>;
  * The row a model's store hands back, which can be wider than the schema: a
  * Drizzle table's `$inferSelect` (matched structurally, no drizzle-orm import)
  * when `table` carries one, the schema's type otherwise (memory, Prisma's
- * delegate-name string).
+ * delegate-name string). Spelled over `Model`'s own generics so the interface
+ * can name its row; consumers use {@link InferModelRow}.
  */
-export type RowOf<T extends ZodObject<ZodRawShape>, TTable> = NonNullable<TTable> extends {
+type RowOf<T extends ZodObject<ZodRawShape>, TTable> = NonNullable<TTable> extends {
   $inferSelect: infer R extends Record<string, unknown>;
 }
   ? R
@@ -1828,7 +1835,8 @@ export type RowOf<T extends ZodObject<ZodRawShape>, TTable> = NonNullable<TTable
 
 /**
  * Infer the stored row type from a Model — what `serializer` and the
- * read-side hooks receive. See {@link RowOf}.
+ * read-side hooks receive: a Drizzle table's `$inferSelect` when the model
+ * has one, the schema's type otherwise.
  * @example
  * type AttachmentRow = InferModelRow<typeof AttachmentModel>;
  */

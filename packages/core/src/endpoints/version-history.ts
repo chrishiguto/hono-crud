@@ -10,6 +10,7 @@ import type {
   VersionHistoryEntry,
 } from '../core/types';
 import { CrudEndpoint } from './base';
+import { pickFields } from './projection';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 
 /**
@@ -36,13 +37,9 @@ function projectVersionEntry(
   entry: VersionHistoryEntry,
   fields: ReadonlySet<string>,
 ): VersionHistoryEntry {
-  const data: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(entry.data)) {
-    if (fields.has(key)) data[key] = value;
-  }
   return {
     ...entry,
-    data,
+    data: pickFields(entry.data, fields),
     ...(entry.changes && { changes: projectChanges(entry.changes, fields) }),
   };
 }

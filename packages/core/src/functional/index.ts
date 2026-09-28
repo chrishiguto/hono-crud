@@ -36,12 +36,12 @@ import type {
   FilterConfig,
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationNamesOf,
   SortSpec,
 } from '../core/types';
-import type { InferModelRow } from '../core/types';
 import type { ModelObject } from '../endpoints/types';
 
 // ============================================================================

@@ -5,11 +5,11 @@ import { getManagedInputExclusions, rethrowAsConstraintError } from '../core/man
 import type {
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationConfig,
 } from '../core/types';
-import type { InferModelRow } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';

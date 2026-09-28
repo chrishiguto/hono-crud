@@ -286,6 +286,12 @@ async function setup(): Promise<AdapterContext> {
   class FinalizeRead extends PrismaReadEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+    protected override etagEnabled = true;
+  }
+  class FinalizeUpdate extends PrismaUpdateEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override etagEnabled = true;
   }
   class FinalizeList extends PrismaListEndpoint {
     _meta = finalizeMeta;
@@ -311,6 +317,17 @@ async function setup(): Promise<AdapterContext> {
     _meta = finalizeMeta;
     prisma = crudClient;
     protected override upsertKeys = ['email'];
+  }
+  class FinalizeImport extends PrismaImportEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override upsertKeys = ['email'];
+  }
+  class FinalizeBulkPatch extends PrismaBulkPatchEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override filterFields = ['email'];
+    protected override returnRecords = true;
   }
 
   class HookItemCreate extends PrismaCreateEndpoint {
@@ -468,6 +485,9 @@ async function setup(): Promise<AdapterContext> {
     batchDelete: FinalizeBatchDelete,
     export: FinalizeExport,
     batchUpsert: FinalizeBatchUpsert,
+    import: FinalizeImport,
+    bulkPatch: FinalizeBulkPatch,
+    update: FinalizeUpdate,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });
@@ -548,6 +568,9 @@ export const prismaConformance: AdapterDescriptor = {
     // no `bulk_patched` events fire and `returnRecords` is unsupported. Pinned
     // by the prisma-only zero-events cell; never "fixed".
     bulkPatchReturnsRecords: false,
+    // The examples `users` table has no version column, so the finalize model
+    // carries no versioning and mounts no version verbs; the skip is named.
+    versionHistory: false,
   },
   tenant: {
     field: 'status',
