@@ -8,9 +8,9 @@ import type {
   OpenAPIRouteSchema,
   VersionHistoryEntry,
 } from '../core/types';
+import type { InferModelRow } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
-import type { ModelObject } from './types';
 
 /**
  * Decrypt the configured encrypted fields inside a version snapshot's `data`
@@ -556,7 +556,7 @@ export abstract class VersionRollbackEndpoint<
     versionData: Record<string, unknown>,
     newVersion: number,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Checks if the parent record exists (owner-scoped). Override in adapter.
@@ -609,9 +609,9 @@ export abstract class VersionRollbackEndpoint<
 
     // Decrypt the returned record for the response (mirrors update/restore). The
     // value at rest stays the historical ciphertext; this only affects the body.
-    const decrypted = (await this.decryptOnRead(result as Record<string, unknown>)) as ModelObject<
-      M['model']
-    >;
+    const decrypted = (await this.decryptOnRead(
+      result as Record<string, unknown>,
+    )) as InferModelRow<M['model']>;
 
     // Apply serializer if defined
     const serialized = this._meta.model.serializer

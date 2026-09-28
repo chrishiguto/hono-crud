@@ -4,6 +4,7 @@ import { type CacheableEndpoint, readEndpointCache, writeEndpointCache } from '.
 import { ConfigurationException } from '../core/exceptions';
 import type {
   FilterConfig,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   PaginatedResult,
@@ -285,7 +286,7 @@ export abstract class ListEndpoint<
    * Lifecycle hook: called after list operation.
    * Override to transform results before returning.
    */
-  async after(items: ModelObject<M['model']>[]): Promise<ModelObject<M['model']>[]> {
+  async after(items: InferModelRow<M['model']>[]): Promise<InferModelRow<M['model']>[]> {
     return items;
   }
 
@@ -312,7 +313,7 @@ export abstract class ListEndpoint<
    * Lists resources from the database with filtering, sorting, and pagination.
    * Must be implemented by ORM-specific subclasses.
    */
-  abstract list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>>;
+  abstract list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>>;
 
   /**
    * Main handler for the list operation.
@@ -341,8 +342,8 @@ export abstract class ListEndpoint<
     const cacheTenantId = cacheActive ? this.getTenantId() : undefined;
     if (cacheActive) {
       const cached = await readEndpointCache<{
-        result: ModelObject<M['model']>[];
-        result_info: PaginatedResult<ModelObject<M['model']>>['result_info'];
+        result: InferModelRow<M['model']>[];
+        result_info: PaginatedResult<InferModelRow<M['model']>>['result_info'];
       }>(this as unknown as CacheableEndpoint, cacheTenantId);
       if (cached) {
         const hit = this.successPaginated(cached.result, cached.result_info);
@@ -373,7 +374,7 @@ export abstract class ListEndpoint<
     // Apply policy `read` predicate post-fetch (catches whatever the
     // pushdown couldn't express) and `fields` mask. No-op when no policies.
     const policyFiltered = await this.applyReadPolicyToArray(
-      decrypted as ModelObject<M['model']>[],
+      decrypted as InferModelRow<M['model']>[],
     );
 
     const items = await this.after(policyFiltered);

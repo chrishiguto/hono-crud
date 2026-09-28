@@ -13,6 +13,7 @@ import type {
   OpenAPIRouteSchema,
   RelationConfig,
 } from '../core/types';
+import type { InferModelRow } from '../core/types';
 import { generateETag, matchesIfMatch } from '../utils/etag';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
@@ -289,10 +290,10 @@ export abstract class UpdateEndpoint<
    * transaction.
    */
   async after(
-    _prior: ModelObject<M['model']>,
-    current: ModelObject<M['model']>,
+    _prior: InferModelRow<M['model']>,
+    current: InferModelRow<M['model']>,
     _hookCtx: HookContext,
-  ): Promise<ModelObject<M['model']> | void> {
+  ): Promise<InferModelRow<M['model']> | void> {
     return current;
   }
 
@@ -324,7 +325,7 @@ export abstract class UpdateEndpoint<
     data: Partial<ModelObject<M['model']>>,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Finds the existing record for audit logging.
@@ -334,7 +335,7 @@ export abstract class UpdateEndpoint<
     _lookupValue: string,
     _additionalFilters?: Record<string, string>,
     _tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     // Default implementation returns null - override in adapter
     return null;
   }
@@ -452,7 +453,7 @@ export abstract class UpdateEndpoint<
       throw new NotFoundException(this._meta.model.tableName, lookupValue);
     }
 
-    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as ModelObject<M['model']>;
+    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as InferModelRow<M['model']>;
 
     // Get the parent ID for nested writes
     const parentId = this.getParentId(obj);
@@ -498,7 +499,7 @@ export abstract class UpdateEndpoint<
     // for `prior` — preserves the historical "after sees the row" shape
     // for that edge case rather than passing `null` and forcing every
     // override to handle it.
-    const priorForHook = (previousRecord ?? obj) as ModelObject<M['model']>;
+    const priorForHook = (previousRecord ?? obj) as InferModelRow<M['model']>;
     if (this.afterHookMode === 'fire-and-forget') {
       this.runAfterResponse(Promise.resolve(this.after(priorForHook, obj, hookCtx)));
     } else {
@@ -513,7 +514,7 @@ export abstract class UpdateEndpoint<
     // at rest stay ciphertext — this decrypt only feeds the downstream payloads.
     // `decryptOnRead` is a no-op without fieldEncryption.
     const previousDecrypted = previousRecord
-      ? ((await this.decryptOnRead(previousRecord as Record<string, unknown>)) as ModelObject<
+      ? ((await this.decryptOnRead(previousRecord as Record<string, unknown>)) as InferModelRow<
           M['model']
         >)
       : previousRecord;

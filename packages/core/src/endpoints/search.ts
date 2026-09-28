@@ -3,6 +3,7 @@ import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { ApiException } from '../core/exceptions';
 import type {
   FilterConfig,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   SearchFieldConfig,
@@ -23,12 +24,7 @@ import {
   parseSearchMode,
   tokenizeQuery,
 } from './search-utils';
-import {
-  type ListFilterParseOptions,
-  type ListFilters,
-  type ModelObject,
-  parseListFilters,
-} from './types';
+import { type ListFilterParseOptions, type ListFilters, parseListFilters } from './types';
 
 /**
  * Detect a string schema across Zod 3 and Zod 4.
@@ -419,8 +415,8 @@ export abstract class SearchEndpoint<
    * Override to transform results before returning.
    */
   async afterSearch(
-    results: SearchResultItem<ModelObject<M['model']>>[],
-  ): Promise<SearchResultItem<ModelObject<M['model']>>[]> {
+    results: SearchResultItem<InferModelRow<M['model']>>[],
+  ): Promise<SearchResultItem<InferModelRow<M['model']>>[]> {
     return results;
   }
 
@@ -439,7 +435,7 @@ export abstract class SearchEndpoint<
   abstract search(
     options: SearchOptions,
     filters: ListFilters,
-  ): Promise<SearchResult<ModelObject<M['model']>>>;
+  ): Promise<SearchResult<InferModelRow<M['model']>>>;
 
   // ============================================================================
   // Request Handler
@@ -477,7 +473,7 @@ export abstract class SearchEndpoint<
     searchResult.items = await Promise.all(
       searchResult.items.map(async (hit) => ({
         ...hit,
-        item: (await this.decryptOnRead(hit.item as Record<string, unknown>)) as ModelObject<
+        item: (await this.decryptOnRead(hit.item as Record<string, unknown>)) as InferModelRow<
           M['model']
         >,
       })),

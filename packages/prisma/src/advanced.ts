@@ -26,7 +26,7 @@ import type {
   SearchOptions,
   SearchResult,
 } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { getPrismaClient } from './connection';
 import {
   type PrismaClient,
@@ -51,8 +51,8 @@ export abstract class PrismaSearchEndpoint<
 > extends SearchEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -126,7 +126,7 @@ export abstract class PrismaSearchEndpoint<
   override async search(
     options: SearchOptions,
     filters: ListFilters,
-  ): Promise<SearchResult<ModelObject<M['model']>>> {
+  ): Promise<SearchResult<InferModelRow<M['model']>>> {
     const model = await this.getModel();
 
     // Build WHERE clause with search conditions and soft delete filtering
@@ -198,11 +198,11 @@ export abstract class PrismaExportEndpoint<
 > extends ExportEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
-  override async list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>> {
+  override async list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>> {
     // Execute common query logic
     const queryResult = await executePrismaQuery({
       model: await this.getModel(),
@@ -249,8 +249,8 @@ export abstract class PrismaImportEndpoint<
 > extends ImportEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -258,7 +258,7 @@ export abstract class PrismaImportEndpoint<
    */
   override async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     return findByUpsertKeys(
       await this.getModel(),
       data as Record<string, unknown>,
@@ -269,7 +269,9 @@ export abstract class PrismaImportEndpoint<
   /**
    * Creates a new record.
    */
-  override async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
+  override async create(
+    data: Partial<ModelObject<M['model']>>,
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -283,9 +285,9 @@ export abstract class PrismaImportEndpoint<
    * Updates an existing record.
    */
   override async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
     const primaryKey = this._meta.model.primaryKeys[0];
 
@@ -311,8 +313,8 @@ export abstract class PrismaUpsertEndpoint<
   declare prisma?: PrismaClient;
   protected useTransaction = false;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -320,7 +322,7 @@ export abstract class PrismaUpsertEndpoint<
    */
   override async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     return findByUpsertKeys(
       await this.getModel(),
       data as Record<string, unknown>,
@@ -331,7 +333,9 @@ export abstract class PrismaUpsertEndpoint<
   /**
    * Creates a new record.
    */
-  override async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
+  override async create(
+    data: Partial<ModelObject<M['model']>>,
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -345,9 +349,9 @@ export abstract class PrismaUpsertEndpoint<
    * Updates an existing record.
    */
   override async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
     const primaryKey = this._meta.model.primaryKeys[0];
 
@@ -365,7 +369,7 @@ export abstract class PrismaUpsertEndpoint<
   protected override async nativeUpsert(
     data: Partial<ModelObject<M['model']>>,
     _tx?: unknown,
-  ): Promise<{ data: ModelObject<M['model']>; created: boolean }> {
+  ): Promise<{ data: InferModelRow<M['model']>; created: boolean }> {
     const model = await this.getModel();
     const upsertKeys = this.getUpsertKeys();
     const primaryKey = this._meta.model.primaryKeys[0];
@@ -430,8 +434,8 @@ export abstract class PrismaBulkPatchEndpoint<
 > extends BulkPatchEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /** Where clause shared by countMatching/applyPatch: filters + soft-delete guard. */
@@ -452,7 +456,7 @@ export abstract class PrismaBulkPatchEndpoint<
   override async applyPatch(
     data: Partial<ModelObject<M['model']>>,
     filters: ListFilters,
-  ): Promise<{ updated: number; records?: ModelObject<M['model']>[] }> {
+  ): Promise<{ updated: number; records?: InferModelRow<M['model']>[] }> {
     const model = await this.getModel();
 
     const result = await model.updateMany({
@@ -474,8 +478,8 @@ export abstract class PrismaVersionHistoryEndpoint<
 > extends VersionHistoryEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   protected override async recordExists(lookupValue: string): Promise<boolean> {
@@ -517,15 +521,15 @@ export abstract class PrismaVersionRollbackEndpoint<
 > extends VersionRollbackEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async rollback(
     lookupValue: string,
     versionData: Record<string, unknown>,
     newVersion: number,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
     const versionField = this.getVersioningConfig().field;
     const primaryKey = this._meta.model.primaryKeys[0];
@@ -569,8 +573,8 @@ export abstract class PrismaAggregateEndpoint<
    */
   protected useNativeAggregation = true;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -682,7 +686,7 @@ export abstract class PrismaAggregateEndpoint<
    * Performs aggregation without groupBy using native Prisma aggregate.
    */
   protected async aggregateSimple(
-    model: PrismaModelOperations<ModelObject<M['model']>>,
+    model: PrismaModelOperations<InferModelRow<M['model']>>,
     where: Record<string, unknown>,
     options: AggregateOptions,
   ): Promise<AggregateResult> {
@@ -762,7 +766,7 @@ export abstract class PrismaAggregateEndpoint<
    * Performs aggregation with groupBy using native Prisma groupBy.
    */
   protected async aggregateWithGroupBy(
-    model: PrismaModelOperations<ModelObject<M['model']>>,
+    model: PrismaModelOperations<InferModelRow<M['model']>>,
     where: Record<string, unknown>,
     options: AggregateOptions,
   ): Promise<AggregateResult> {
@@ -884,8 +888,8 @@ export abstract class PrismaCloneEndpoint<
 > extends CloneEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /** Generates the primary-key value for the cloned row. Defaults to UUIDv4. */
@@ -896,7 +900,7 @@ export abstract class PrismaCloneEndpoint<
   override async findSource(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -913,7 +917,7 @@ export abstract class PrismaCloneEndpoint<
     return result;
   }
 
-  override async createClone(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
+  override async createClone(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).

@@ -2,10 +2,10 @@ import type { Env } from 'hono';
 import { stream } from 'hono/streaming';
 import { z } from 'zod';
 import type { ListFilters, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { InferModelRow } from '../core/types';
 import { type CsvGenerateOptions, escapeCsvValue, generateCsv } from '../utils/csv';
 import { ListEndpoint } from './list';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
-import type { ModelObject } from './types';
 
 // ============================================================================
 // Export Types
@@ -175,7 +175,9 @@ export abstract class ExportEndpoint<
   /**
    * Prepares records for export by applying field exclusions.
    */
-  protected prepareRecordsForExport(records: ModelObject<M['model']>[]): Record<string, unknown>[] {
+  protected prepareRecordsForExport(
+    records: InferModelRow<M['model']>[],
+  ): Record<string, unknown>[] {
     if (this.excludedExportFields.length === 0) {
       return records as Record<string, unknown>[];
     }
@@ -298,7 +300,7 @@ export abstract class ExportEndpoint<
             // list — the streaming path also reads through the adapter `list`).
             records = (await Promise.all(
               records.map((record) => this.decryptOnRead(record as Record<string, unknown>)),
-            )) as ModelObject<M['model']>[];
+            )) as InferModelRow<M['model']>[];
 
             records = await this.after(records);
             records = await this.beforeExport(records);
@@ -347,7 +349,7 @@ export abstract class ExportEndpoint<
    * Lifecycle hook: called after records are fetched but before export.
    * Override to transform or filter records before export.
    */
-  async beforeExport(records: ModelObject<M['model']>[]): Promise<ModelObject<M['model']>[]> {
+  async beforeExport(records: InferModelRow<M['model']>[]): Promise<InferModelRow<M['model']>[]> {
     return records;
   }
 
@@ -355,7 +357,7 @@ export abstract class ExportEndpoint<
    * Fetches all records for export.
    * Overrides pagination to fetch up to maxExportRecords.
    */
-  protected async fetchAllForExport(filters: ListFilters): Promise<ModelObject<M['model']>[]> {
+  protected async fetchAllForExport(filters: ListFilters): Promise<InferModelRow<M['model']>[]> {
     // Override pagination to fetch all records up to the limit (hard cap at 100k)
     const effectiveLimit = Math.min(this.maxExportRecords, 100_000);
     const exportFilters: ListFilters = {
@@ -397,7 +399,7 @@ export abstract class ExportEndpoint<
     // does not inherit List's decrypt).
     records = (await Promise.all(
       records.map((record) => this.decryptOnRead(record as Record<string, unknown>)),
-    )) as ModelObject<M['model']>[];
+    )) as InferModelRow<M['model']>[];
 
     // Apply after hook (from ListEndpoint)
     records = await this.after(records);

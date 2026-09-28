@@ -189,7 +189,7 @@ const finalizeModel = defineModel({
   computedFields: {
     nameUpper: {
       schema: z.string(),
-      compute: (record: Item) => record.name.toUpperCase(),
+      compute: (record) => record.name.toUpperCase(),
     },
   },
 });

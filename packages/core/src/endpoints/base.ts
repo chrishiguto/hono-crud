@@ -43,6 +43,7 @@ import {
   type FilterCondition,
   type HookContext,
   type HookMode,
+  type InferModelRow,
   type ListFilters,
   type MetaInput,
   type ModelPolicies,
@@ -64,12 +65,7 @@ import { applyProfile, applyProfileToArray } from '../serialization/serialize';
 import { getContextVar, setContextVar } from '../utils/context';
 import { type VersionManager, createVersionManager } from '../versioning';
 import { getVersioningConfig } from '../versioning/config';
-import {
-  type FieldSelection,
-  type ModelObject,
-  applyFieldSelection,
-  applyFieldSelectionToArray,
-} from './types';
+import { type FieldSelection, applyFieldSelection, applyFieldSelectionToArray } from './types';
 
 /**
  * Per-request memoization key for `Model.resolveSchema(ctx)` results.
@@ -87,11 +83,11 @@ const RESOLVED_SCHEMA_KEY_PREFIX = '__honoCrudResolvedSchema:';
 type SchemaOf<M extends MetaInput> = M['model']['schema'];
 
 /**
- * Inferred row type for a `MetaInput`'s model schema (i.e. `z.infer<...>`).
- * Used to type `policies` callbacks and other row-shaped helpers without
- * collapsing to `unknown`.
+ * The stored row of a `MetaInput`'s model (see `InferModelRow`): what the
+ * adapter read, which `policies` callbacks, `after` hooks and the serializer
+ * receive. Can be wider than the schema.
  */
-type RowOf<M extends MetaInput> = z.infer<SchemaOf<M>>;
+type RowOf<M extends MetaInput> = InferModelRow<M['model']>;
 
 /**
  * Type predicate: does `o` expose a `getBodySchema()` method? Endpoints
@@ -608,7 +604,7 @@ export abstract class CrudEndpoint<
    * `handle()` — they aren't uniform across verbs and run before this tail.
    */
   protected async finalizeRecord(
-    record: ModelObject<M['model']>,
+    record: RowOf<M>,
     fieldSelection?: FieldSelection,
   ): Promise<unknown> {
     const model = this._meta.model;
@@ -616,9 +612,9 @@ export abstract class CrudEndpoint<
     if (model.computedFields) {
       obj = await applyComputedFields(obj, model.computedFields);
     }
-    const serialized = model.serializer ? model.serializer(obj as ModelObject<M['model']>) : obj;
+    const serialized = model.serializer ? model.serializer(obj as RowOf<M>) : obj;
     const profiled = this.applyProfile(serialized as Record<string, unknown>);
-    const transformed = this.transform(profiled as ModelObject<M['model']>);
+    const transformed = this.transform(profiled as RowOf<M>);
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
       return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
     }
@@ -627,7 +623,7 @@ export abstract class CrudEndpoint<
 
   /** Array variant of {@link finalizeRecord}. Same ordered chain, per element. */
   protected async finalizeArray(
-    records: ModelObject<M['model']>[],
+    records: RowOf<M>[],
     fieldSelection?: FieldSelection,
   ): Promise<unknown[]> {
     const model = this._meta.model;
@@ -636,11 +632,9 @@ export abstract class CrudEndpoint<
       items = await applyComputedFieldsToArray(items, model.computedFields);
     }
     const serializer = model.serializer;
-    const serialized = serializer
-      ? items.map((i) => serializer(i as ModelObject<M['model']>))
-      : items;
+    const serialized = serializer ? items.map((i) => serializer(i as RowOf<M>)) : items;
     const profiled = this.applyProfileToArray(serialized as Record<string, unknown>[]);
-    const transformed = profiled.map((i) => this.transform(i as ModelObject<M['model']>));
+    const transformed = profiled.map((i) => this.transform(i as RowOf<M>));
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
       return applyFieldSelectionToArray(transformed as Record<string, unknown>[], fieldSelection);
     }
@@ -666,15 +660,15 @@ export abstract class CrudEndpoint<
    * (id read via `lookupField`) and keeps the original item.
    */
   protected async applyBatchAfterHooks(
-    items: ModelObject<M['model']>[],
+    items: RowOf<M>[],
     errors: Array<{ id: string; error: string }>,
     hooks: {
-      after: (item: ModelObject<M['model']>) => Promise<ModelObject<M['model']>>;
+      after: (item: RowOf<M>) => Promise<RowOf<M>>;
       afterHookMode: HookMode;
       stopOnError: boolean;
     },
-  ): Promise<ModelObject<M['model']>[]> {
-    const results: ModelObject<M['model']>[] = [];
+  ): Promise<RowOf<M>[]> {
+    const results: RowOf<M>[] = [];
     for (const item of items) {
       try {
         if (hooks.afterHookMode === 'fire-and-forget') {
@@ -703,7 +697,7 @@ export abstract class CrudEndpoint<
    */
   protected async finalizeBatchResponse(
     resultKey: 'updated' | 'deleted' | 'restored',
-    results: ModelObject<M['model']>[],
+    results: RowOf<M>[],
     notFound: string[],
     errors: Array<{ id: string; error: string }>,
   ): Promise<Response> {

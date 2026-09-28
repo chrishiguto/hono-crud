@@ -41,6 +41,7 @@ import type {
   RelationNamesOf,
   SortSpec,
 } from '../core/types';
+import type { InferModelRow } from '../core/types';
 import type { ModelObject } from '../endpoints/types';
 
 // ============================================================================
@@ -64,9 +65,9 @@ export interface CreateConfig<M extends MetaInput, E extends Env = Env> {
     ctx?: HookContext,
   ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
   after?: (
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     ctx?: HookContext,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
   allowNestedCreate?: RelationNamesOf<M>[];
   beforeHookMode?: HookMode;
   afterHookMode?: HookMode;
@@ -96,8 +97,8 @@ export interface ListConfig<M extends MetaInput, E extends Env = Env> {
   alwaysIncludeFields?: string[];
   defaultSelectFields?: string[];
   after?: (
-    items: ModelObject<M['model']>[],
-  ) => Promise<ModelObject<M['model']>[]> | ModelObject<M['model']>[];
+    items: InferModelRow<M['model']>[],
+  ) => Promise<InferModelRow<M['model']>[]> | InferModelRow<M['model']>[];
   transform?: (item: ModelObject<M['model']>) => unknown;
   middlewares?: MiddlewareHandler<E>[];
 }
@@ -114,8 +115,8 @@ export interface ReadConfig<M extends MetaInput, E extends Env = Env> {
   alwaysIncludeFields?: string[];
   defaultSelectFields?: string[];
   after?: (
-    data: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    data: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
   transform?: (item: ModelObject<M['model']>) => unknown;
   middlewares?: MiddlewareHandler<E>[];
 }
@@ -142,7 +143,7 @@ export interface UpdateConfig<M extends MetaInput, E extends Env = Env> {
    * transaction so consumers can compute field-level diffs without a
    * re-fetch in `before`.
    */
-  after?: AfterUpdateHook<ModelObject<M['model']>>;
+  after?: AfterUpdateHook<InferModelRow<M['model']>>;
   beforeHookMode?: HookMode;
   afterHookMode?: HookMode;
   transform?: (item: ModelObject<M['model']>) => unknown;
@@ -171,7 +172,7 @@ export interface DeleteConfig<M extends MetaInput, E extends Env = Env> {
    * the pre-mutation row (for soft-delete, before `deletedAt` was set),
    * observed inside the parent DELETE's transaction.
    */
-  after?: AfterDeleteHook<ModelObject<M['model']>>;
+  after?: AfterDeleteHook<InferModelRow<M['model']>>;
   beforeHookMode?: HookMode;
   afterHookMode?: HookMode;
   middlewares?: MiddlewareHandler<E>[];

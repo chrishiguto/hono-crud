@@ -1064,7 +1064,7 @@ export interface Model<
    * });
    * ```
    */
-  computedFields?: ComputedFieldsConfig<z.infer<T>>;
+  computedFields?: ComputedFieldsConfig<RowOf<T, TTable>>;
 
   /**
    * Configure audit logging for this model.
@@ -1182,7 +1182,7 @@ export interface Model<
    * List, Read, Update, and Delete endpoints. See `ModelPolicies` for the
    * full surface.
    */
-  policies?: ModelPolicies<z.infer<T>>;
+  policies?: ModelPolicies<RowOf<T, TTable>>;
 
   /**
    * Primary-key generation strategy. Applied at every write site
@@ -1820,8 +1820,11 @@ export type InferModel<M extends Model> = z.infer<M['schema']>;
  * when `table` carries one, the schema's type otherwise (memory, Prisma's
  * delegate-name string).
  */
-export type RowOf<T extends ZodObject<ZodRawShape>, TTable> =
-  NonNullable<TTable> extends { $inferSelect: infer R } ? R : z.infer<T>;
+export type RowOf<T extends ZodObject<ZodRawShape>, TTable> = NonNullable<TTable> extends {
+  $inferSelect: infer R extends Record<string, unknown>;
+}
+  ? R
+  : z.infer<T>;
 
 /**
  * Infer the stored row type from a Model — what `serializer` and the

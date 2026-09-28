@@ -5,7 +5,7 @@ import { BatchUpdateEndpoint, type BatchUpdateItem } from 'hono-crud/internal';
 import { BatchDeleteEndpoint } from 'hono-crud/internal';
 import { BatchRestoreEndpoint } from 'hono-crud/internal';
 import type { MetaInput } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { getDrizzleDb } from './connection';
 import {
   type DrizzleColumn,
@@ -48,7 +48,7 @@ export abstract class DrizzleBatchCreateEndpoint<
 
   override async batchCreate(
     items: Partial<ModelObject<M['model']>>[],
-  ): Promise<ModelObject<M['model']>[]> {
+  ): Promise<InferModelRow<M['model']>[]> {
     const table = this.getTable();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -56,7 +56,7 @@ export abstract class DrizzleBatchCreateEndpoint<
       this.applyManagedInsertFields(item as Record<string, unknown>, 'drizzle'),
     );
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .insert(table)
       .values(records)
       .returning();
@@ -99,11 +99,11 @@ export abstract class DrizzleBatchUpdateEndpoint<
 
   override async batchUpdate(
     items: BatchUpdateItem<ModelObject<M['model']>>[],
-  ): Promise<{ updated: ModelObject<M['model']>[]; notFound: string[] }> {
+  ): Promise<{ updated: InferModelRow<M['model']>[]; notFound: string[] }> {
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
     const softDeleteConfig = this.getSoftDeleteConfig();
-    const updated: ModelObject<M['model']>[] = [];
+    const updated: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
     // Owner-scope: only the caller's own rows are updatable (cross-tenant ids fall
     // through to `notFound`).
@@ -120,7 +120,7 @@ export abstract class DrizzleBatchUpdateEndpoint<
         conditions.push(eq(this.getColumn(tenant.field), tenant.value));
       }
 
-      const result = await cast<ModelObject<M['model']>>(this.getDb())
+      const result = await cast<InferModelRow<M['model']>>(this.getDb())
         .update(table)
         .set(this.applyManagedUpdateFields(item.data as Record<string, unknown>))
         .where(and(...conditions))
@@ -171,7 +171,7 @@ export abstract class DrizzleBatchDeleteEndpoint<
 
   override async batchDelete(
     ids: string[],
-  ): Promise<{ deleted: ModelObject<M['model']>[]; notFound: string[] }> {
+  ): Promise<{ deleted: InferModelRow<M['model']>[]; notFound: string[] }> {
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
     const softDeleteConfig = this.getSoftDeleteConfig();
@@ -188,11 +188,11 @@ export abstract class DrizzleBatchDeleteEndpoint<
       conditions.push(eq(this.getColumn(tenant.field), tenant.value));
     }
 
-    let result: ModelObject<M['model']>[];
+    let result: InferModelRow<M['model']>[];
 
     if (softDeleteConfig.enabled) {
       // Soft delete: set the deletion timestamp
-      result = await cast<ModelObject<M['model']>>(this.getDb())
+      result = await cast<InferModelRow<M['model']>>(this.getDb())
         .update(table)
         .set({
           [softDeleteConfig.field]: this.managedTimestampValue(softDeleteConfig.field),
@@ -201,7 +201,7 @@ export abstract class DrizzleBatchDeleteEndpoint<
         .returning();
     } else {
       // Hard delete: actually remove the records
-      result = await cast<ModelObject<M['model']>>(this.getDb())
+      result = await cast<InferModelRow<M['model']>>(this.getDb())
         .delete(table)
         .where(and(...conditions))
         .returning();
@@ -246,7 +246,7 @@ export abstract class DrizzleBatchRestoreEndpoint<
 
   override async batchRestore(
     ids: string[],
-  ): Promise<{ restored: ModelObject<M['model']>[]; notFound: string[] }> {
+  ): Promise<{ restored: InferModelRow<M['model']>[]; notFound: string[] }> {
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
     const softDeleteConfig = this.getSoftDeleteConfig();
@@ -264,7 +264,7 @@ export abstract class DrizzleBatchRestoreEndpoint<
     }
 
     // Set deletedAt to null to restore the records
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .update(table)
       .set({ [softDeleteConfig.field]: null } as Record<string, unknown>)
       .where(and(...conditions))

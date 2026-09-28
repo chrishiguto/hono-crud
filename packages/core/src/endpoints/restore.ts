@@ -2,9 +2,9 @@ import type { Env } from 'hono';
 import { z } from 'zod';
 import { ApiException, NotFoundException } from '../core/exceptions';
 import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { InferModelRow } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
-import type { ModelObject } from './types';
 
 /**
  * Base endpoint for restoring soft-deleted resources.
@@ -92,9 +92,9 @@ export abstract class RestoreEndpoint<
    * Override to perform side effects after restoring.
    */
   async after(
-    restoredItem: ModelObject<M['model']>,
+    restoredItem: InferModelRow<M['model']>,
     _tx?: unknown,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     return restoredItem;
   }
 
@@ -107,7 +107,7 @@ export abstract class RestoreEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Gets the record ID from the restored item.
@@ -141,7 +141,7 @@ export abstract class RestoreEndpoint<
     // response (mirrors read — restore returns a row read back from storage).
     restoredItem = (await this.decryptOnRead(
       restoredItem as Record<string, unknown>,
-    )) as ModelObject<M['model']>;
+    )) as InferModelRow<M['model']>;
 
     // Handle after hook based on mode
     if (this.afterHookMode === 'fire-and-forget') {

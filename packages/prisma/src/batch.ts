@@ -6,7 +6,7 @@ import { BatchRestoreEndpoint } from 'hono-crud/internal';
 import { BatchUpsertEndpoint } from 'hono-crud/internal';
 import { RestoreEndpoint } from 'hono-crud/internal';
 import type { MetaInput } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { ConfigurationException } from 'hono-crud/internal';
 import { getPrismaClient } from './connection';
 import {
@@ -33,14 +33,14 @@ export abstract class PrismaRestoreEndpoint<
   declare prisma?: PrismaClient;
   protected useTransaction = false;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async restore(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -79,13 +79,13 @@ export abstract class PrismaBatchCreateEndpoint<
 > extends BatchCreateEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async batchCreate(
     items: Partial<ModelObject<M['model']>>[],
-  ): Promise<ModelObject<M['model']>[]> {
+  ): Promise<InferModelRow<M['model']>[]> {
     // Resolve managed write-time fields (Model.id strategy + timestamps).
     const records = items.map((item) =>
       this.applyManagedInsertFields(item as Record<string, unknown>, 'prisma'),
@@ -93,10 +93,10 @@ export abstract class PrismaBatchCreateEndpoint<
 
     // Prisma's createMany doesn't return the created records, so we need to use
     // individual creates or a transaction with creates
-    const created: ModelObject<M['model']>[] = [];
+    const created: InferModelRow<M['model']>[] = [];
 
     await getPrismaTransaction(getPrismaClient(this))(async (tx) => {
-      const txModel = getPrismaModelByName<ModelObject<M['model']>>(
+      const txModel = getPrismaModelByName<InferModelRow<M['model']>>(
         tx,
         await resolvePrismaDelegateName(this._meta.model),
       );
@@ -127,17 +127,17 @@ export abstract class PrismaBatchUpdateEndpoint<
 > extends BatchUpdateEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async batchUpdate(
     items: BatchUpdateItem<ModelObject<M['model']>>[],
-  ): Promise<{ updated: ModelObject<M['model']>[]; notFound: string[] }> {
+  ): Promise<{ updated: InferModelRow<M['model']>[]; notFound: string[] }> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
     const primaryKey = this._meta.model.primaryKeys[0];
-    const updated: ModelObject<M['model']>[] = [];
+    const updated: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
 
     // Extract all IDs for batch lookup
@@ -201,17 +201,17 @@ export abstract class PrismaBatchDeleteEndpoint<
 > extends BatchDeleteEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async batchDelete(
     ids: string[],
-  ): Promise<{ deleted: ModelObject<M['model']>[]; notFound: string[] }> {
+  ): Promise<{ deleted: InferModelRow<M['model']>[]; notFound: string[] }> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
     const primaryKey = this._meta.model.primaryKeys[0];
-    const deleted: ModelObject<M['model']>[] = [];
+    const deleted: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
 
     // Build where clause for batch lookup
@@ -284,17 +284,17 @@ export abstract class PrismaBatchRestoreEndpoint<
 > extends BatchRestoreEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async batchRestore(
     ids: string[],
-  ): Promise<{ restored: ModelObject<M['model']>[]; notFound: string[] }> {
+  ): Promise<{ restored: InferModelRow<M['model']>[]; notFound: string[] }> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
     const primaryKey = this._meta.model.primaryKeys[0];
-    const restored: ModelObject<M['model']>[] = [];
+    const restored: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
 
     // Build where clause - only find records that are actually deleted
@@ -356,8 +356,8 @@ export abstract class PrismaBatchUpsertEndpoint<
   declare prisma?: PrismaClient;
   protected useTransaction = true;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -365,7 +365,7 @@ export abstract class PrismaBatchUpsertEndpoint<
    */
   override async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     return findByUpsertKeys(
       await this.getModel(),
       data as Record<string, unknown>,
@@ -376,7 +376,9 @@ export abstract class PrismaBatchUpsertEndpoint<
   /**
    * Creates a new record.
    */
-  override async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
+  override async create(
+    data: Partial<ModelObject<M['model']>>,
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -390,9 +392,9 @@ export abstract class PrismaBatchUpsertEndpoint<
    * Updates an existing record.
    */
   override async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
     const primaryKey = this._meta.model.primaryKeys[0];
 
@@ -411,7 +413,7 @@ export abstract class PrismaBatchUpsertEndpoint<
     items: Partial<ModelObject<M['model']>>[],
     _tx?: unknown,
   ): Promise<{
-    items: Array<{ data: ModelObject<M['model']>; created: boolean; index: number }>;
+    items: Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }>;
     createdCount: number;
     updatedCount: number;
     totalCount: number;
@@ -431,7 +433,7 @@ export abstract class PrismaBatchUpsertEndpoint<
     const timestamps = this.getTimestampsConfig();
 
     const executeUpserts = async (prismaClient: PrismaClient) => {
-      const model = getPrismaModelByName<ModelObject<M['model']>>(
+      const model = getPrismaModelByName<InferModelRow<M['model']>>(
         prismaClient,
         await resolvePrismaDelegateName(this._meta.model),
       );
@@ -440,7 +442,8 @@ export abstract class PrismaBatchUpsertEndpoint<
           `Model '${this._meta.model.tableName}' not found in Prisma client`,
         );
       }
-      const results: Array<{ data: ModelObject<M['model']>; created: boolean; index: number }> = [];
+      const results: Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }> =
+        [];
       const errors: Array<{ index: number; error: string }> = [];
 
       for (let i = 0; i < items.length; i++) {
@@ -506,7 +509,7 @@ export abstract class PrismaBatchUpsertEndpoint<
 
     let outcome: {
       results: typeof items extends unknown[]
-        ? Array<{ data: ModelObject<M['model']>; created: boolean; index: number }>
+        ? Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }>
         : never;
       errors: Array<{ index: number; error: string }>;
     };
@@ -518,7 +521,7 @@ export abstract class PrismaBatchUpsertEndpoint<
     }
 
     const result: {
-      items: Array<{ data: ModelObject<M['model']>; created: boolean; index: number }>;
+      items: Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }>;
       createdCount: number;
       updatedCount: number;
       totalCount: number;

@@ -14,11 +14,18 @@ The Drizzle adapter uses a two-tier type system (packages/drizzle/src/helpers.ts
    (`select`/`insert`/`update`/`delete`/`transaction`), used as the `DB` generic bound on every
    endpoint class — any Drizzle database satisfies it without coupling to drizzle-orm types.
 2. **Internal interfaces** (`Database<Row>`, `QueryBuilder<Row>`): typed method signatures used
-   inside the adapter; `Row` derives from the consumer's Zod schema (`ModelObject<M['model']>`),
-   never from a drizzle-orm type. `QueryBuilder<Row>` is `PromiseLike<Row[]>`.
+   inside the adapter; `Row` is the model's stored row (`InferModelRow<M['model']>`) — the table's
+   `$inferSelect` matched structurally, else the Zod schema — never an imported drizzle-orm type.
+   `QueryBuilder<Row>` is `PromiseLike<Row[]>`.
 3. **Casting function** (`cast<Row>()`): the single sanctioned boundary `as`, converting an
    unknown database instance to `Database<Row>` for internal method calls.
 This pattern avoids coupling to specific Drizzle versions while maintaining internal type safety.
+
+### Row vs public shape
+`ModelObject`/`InferModel` is the model's public shape (the Zod schema): request bodies,
+`before` hooks, `transform`. `InferModelRow` is what the store hands back, which can be wider
+(server-only columns, JSON text columns): adapter read/write returns, `after` hooks,
+`serializer`, `computedFields`, `policies`. Type each value by where it came from.
 
 ## Adapter Behavior Rules
 

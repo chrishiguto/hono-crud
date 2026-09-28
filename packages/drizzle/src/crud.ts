@@ -21,7 +21,7 @@ import type {
   PaginatedResult,
   RelationConfig,
 } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { getDrizzleDb } from './connection';
 import {
   type DrizzleColumn,
@@ -123,14 +123,17 @@ export abstract class DrizzleCreateEndpoint<
   override async create(
     data: ModelObject<M['model']>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const db = tx ?? this.getDb();
     const table = this.getTable();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'drizzle');
 
-    const result = await cast<ModelObject<M['model']>>(db).insert(table).values(record).returning();
+    const result = await cast<InferModelRow<M['model']>>(db)
+      .insert(table)
+      .values(record)
+      .returning();
 
     return result[0];
   }
@@ -224,7 +227,7 @@ export abstract class DrizzleReadEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     includeOptions?: IncludeOptions,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
     const softDeleteConfig = this.getSoftDeleteConfig();
@@ -241,7 +244,7 @@ export abstract class DrizzleReadEndpoint<
     // Filter out soft-deleted records
     pushSoftDeleteExclusion(conditions, softDeleteConfig, (field) => this.getColumn(field));
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .select()
       .from(table)
       .where(and(...conditions))
@@ -320,7 +323,7 @@ export abstract class DrizzleUpdateEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const db = tx ?? this.getDb();
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
@@ -338,7 +341,7 @@ export abstract class DrizzleUpdateEndpoint<
     // Filter out soft-deleted records
     pushSoftDeleteExclusion(conditions, softDeleteConfig, (field) => this.getColumn(field));
 
-    const result = await cast<ModelObject<M['model']>>(db)
+    const result = await cast<InferModelRow<M['model']>>(db)
       .select()
       .from(table)
       .where(and(...conditions))
@@ -352,7 +355,7 @@ export abstract class DrizzleUpdateEndpoint<
     data: Partial<ModelObject<M['model']>>,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const db = tx ?? this.getDb();
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
@@ -370,7 +373,7 @@ export abstract class DrizzleUpdateEndpoint<
     // Filter out soft-deleted records (cannot update deleted records)
     pushSoftDeleteExclusion(conditions, softDeleteConfig, (field) => this.getColumn(field));
 
-    const result = await cast<ModelObject<M['model']>>(db)
+    const result = await cast<InferModelRow<M['model']>>(db)
       .update(table)
       .set(this.applyManagedUpdateFields(data as Record<string, unknown>))
       .where(and(...conditions))
@@ -581,7 +584,7 @@ export abstract class DrizzleDeleteEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const db = tx ?? this.getDb();
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
@@ -599,7 +602,7 @@ export abstract class DrizzleDeleteEndpoint<
     // Exclude already-deleted records
     pushSoftDeleteExclusion(conditions, softDeleteConfig, (field) => this.getColumn(field));
 
-    const result = await cast<ModelObject<M['model']>>(db)
+    const result = await cast<InferModelRow<M['model']>>(db)
       .select()
       .from(table)
       .where(and(...conditions))
@@ -612,7 +615,7 @@ export abstract class DrizzleDeleteEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const db = tx ?? this.getDb();
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
@@ -632,7 +635,7 @@ export abstract class DrizzleDeleteEndpoint<
 
     if (softDeleteConfig.enabled) {
       // Soft delete: set the deletion timestamp
-      const result = await cast<ModelObject<M['model']>>(db)
+      const result = await cast<InferModelRow<M['model']>>(db)
         .update(table)
         .set({
           [softDeleteConfig.field]: this.managedTimestampValue(softDeleteConfig.field),
@@ -643,7 +646,7 @@ export abstract class DrizzleDeleteEndpoint<
       return result[0] || null;
     } else {
       // Hard delete: actually remove the record
-      const result = await cast<ModelObject<M['model']>>(db)
+      const result = await cast<InferModelRow<M['model']>>(db)
         .delete(table)
         .where(and(...conditions))
         .returning();
@@ -778,9 +781,9 @@ export abstract class DrizzleListEndpoint<
     return getColumn(this.getTable(), field);
   }
 
-  override async list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>> {
+  override async list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>> {
     // Execute common query logic (filters, search, sorting, pagination)
-    const queryResult = await executeDrizzleListQuery<ModelObject<M['model']>>({
+    const queryResult = await executeDrizzleListQuery<InferModelRow<M['model']>>({
       db: this.getDb(),
       table: this.getTable(),
       filters,
@@ -879,7 +882,7 @@ export abstract class DrizzleRestoreEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const db = tx ?? this.getDb();
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
@@ -898,7 +901,7 @@ export abstract class DrizzleRestoreEndpoint<
     conditions.push(isNotNull(this.getColumn(softDeleteConfig.field)));
 
     // Set deletedAt to null to restore the record
-    const result = await cast<ModelObject<M['model']>>(db)
+    const result = await cast<InferModelRow<M['model']>>(db)
       .update(table)
       .set({ [softDeleteConfig.field]: null } as Record<string, unknown>)
       .where(and(...conditions))

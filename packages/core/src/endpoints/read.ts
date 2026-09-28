@@ -2,7 +2,7 @@ import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { type CacheableEndpoint, readEndpointCache, writeEndpointCache } from '../core/cache';
 import { NotFoundException } from '../core/exceptions';
-import type { IncludeOptions, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { IncludeOptions, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { withIncludableRelations } from '../relations/response-schema';
 import { generateETag, matchesIfNoneMatch } from '../utils/etag';
 import { CrudEndpoint } from './base';
@@ -187,7 +187,7 @@ export abstract class ReadEndpoint<
    * Lifecycle hook: called after read operation.
    * Override to transform result before returning.
    */
-  async after(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
+  async after(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -222,7 +222,7 @@ export abstract class ReadEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     includeOptions?: IncludeOptions,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Main handler for the read operation.
@@ -237,7 +237,7 @@ export abstract class ReadEndpoint<
     // (unless cachePerUser) so one user's view can't leak to another.
     const cacheActive = this.isResponseCacheActive();
     if (cacheActive) {
-      const cached = await readEndpointCache<ModelObject<M['model']>>(
+      const cached = await readEndpointCache<InferModelRow<M['model']>>(
         this as unknown as CacheableEndpoint,
         tenantId,
       );
@@ -278,11 +278,11 @@ export abstract class ReadEndpoint<
       throw new NotFoundException(this._meta.model.tableName, lookupValue);
     }
 
-    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as ModelObject<M['model']>;
+    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as InferModelRow<M['model']>;
 
     // Apply policy `read` predicate. Treat denial as 404 to avoid leaking
     // resource existence to callers that aren't allowed to see it.
-    const allowed = await this.applyReadPolicy(obj as ModelObject<M['model']>);
+    const allowed = await this.applyReadPolicy(obj as InferModelRow<M['model']>);
     if (allowed === null) {
       throw new NotFoundException(this._meta.model.tableName, lookupValue);
     }
