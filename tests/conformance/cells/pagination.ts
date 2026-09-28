@@ -85,8 +85,10 @@ export function registerPaginationCells(_descriptor: AdapterDescriptor, ctx: Ctx
       'per_page=0',
       'per_page=abc',
       'per_page=2.5',
+      'per_page=',
       'page=0',
       'page=abc',
+      'page=',
     ]) {
       await expectError(await app.request(`/items?${query}`), 400, 'VALIDATION_ERROR');
     }
@@ -106,7 +108,7 @@ export function registerPaginationCells(_descriptor: AdapterDescriptor, ctx: Ctx
   test('offset pagination: search refuses page/per_page outside the documented bounds', async () => {
     const { app } = ctx();
 
-    for (const query of ['per_page=101', 'per_page=0', 'per_page=abc', 'page=0']) {
+    for (const query of ['per_page=101', 'per_page=0', 'per_page=abc', 'per_page=', 'page=0']) {
       await expectError(await app.request(`/items/search?q=a&${query}`), 400, 'VALIDATION_ERROR');
     }
   });
