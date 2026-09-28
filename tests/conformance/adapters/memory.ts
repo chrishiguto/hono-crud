@@ -106,9 +106,16 @@ const tenantModel = defineModel({
 });
 const tenantMeta = defineMeta({ model: tenantModel });
 
+// The finalize model leaves the leg's tenant column out of its schema, and its
+// create verbs stamp it on insert: the row carries a server-only column the
+// schema never declares, which no response may echo (the finalize cell).
+const finalizeSchema = schema.omit({ tenantId: true });
+type FinalizeItem = z.infer<typeof finalizeSchema>;
+const SERVER_ONLY_VALUE = 'tenant-a';
+
 const finalizeModel = defineModel({
   tableName: TABLE,
-  schema,
+  schema: finalizeSchema,
   primaryKeys: ['id'],
   softDelete: { field: 'deletedAt' },
   timestamps: true,
@@ -320,6 +327,10 @@ class TenantBulkPatch extends MemoryBulkPatchEndpoint {
 
 class FinalizeCreate extends MemoryCreateEndpoint {
   _meta = finalizeMeta;
+
+  override async before(data: FinalizeItem): Promise<FinalizeItem> {
+    return { ...data, tenantId: SERVER_ONLY_VALUE } as FinalizeItem;
+  }
 }
 class FinalizeRead extends MemoryReadEndpoint {
   _meta = finalizeMeta;
@@ -329,6 +340,10 @@ class FinalizeList extends MemoryListEndpoint {
 }
 class FinalizeBatchCreate extends MemoryBatchCreateEndpoint {
   _meta = finalizeMeta;
+
+  override async before(data: Partial<FinalizeItem>): Promise<Partial<FinalizeItem>> {
+    return { ...data, tenantId: SERVER_ONLY_VALUE } as Partial<FinalizeItem>;
+  }
 }
 class FinalizeBatchDelete extends MemoryBatchDeleteEndpoint {
   _meta = finalizeMeta;

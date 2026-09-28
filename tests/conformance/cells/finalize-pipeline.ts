@@ -6,7 +6,11 @@
  *   in a response, and
  * - a computed field `nameUpper` — must always appear.
  *
- * Both must hold IDENTICALLY on create, read, list, batchCreate, and
+ * - no tenant column in its schema, while its create verbs stamp one on the
+ *   row — a server-only column (bucket key, password hash) that must never
+ *   appear in a response, with or without a serializer (hono-crud#147).
+ *
+ * All must hold IDENTICALLY on create, read, list, batchCreate, and
  * batchDelete responses (batchDelete previously skipped the shared
  * finalize chain — audit finding 44).
  */
@@ -24,18 +28,19 @@ import {
   readJson,
 } from '../contract';
 
-function expectFinalized(record: ConformanceRecord, expectedName: string): void {
-  expect(record.name).toBe(expectedName);
-  expect(record.nameUpper).toBe(expectedName.toUpperCase());
-  // The serialization profile must strip the field entirely, not null it.
-  expect('age' in record).toBe(false);
-}
+export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx: CtxGetter): void {
+  const serverOnlyField = descriptor.tenant.field;
 
-export function registerFinalizePipelineCells(
-  _descriptor: AdapterDescriptor,
-  ctx: CtxGetter,
-): void {
-  test('finalize pipeline: computed field + profile omission are identical on create/read/list/batchCreate/batchDelete', async () => {
+  function expectFinalized(record: ConformanceRecord, expectedName: string): void {
+    expect(record.name).toBe(expectedName);
+    expect(record.nameUpper).toBe(expectedName.toUpperCase());
+    // The serialization profile must strip the field entirely, not null it.
+    expect('age' in record).toBe(false);
+    // A stored column the schema leaves out never reaches the client.
+    expect(serverOnlyField in record).toBe(false);
+  }
+
+  test('finalize pipeline: computed field, profile omission and schema projection are identical on create/read/list/batchCreate/batchDelete', async () => {
     const { app } = ctx();
 
     // create

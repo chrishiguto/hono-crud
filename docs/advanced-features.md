@@ -641,6 +641,45 @@ Computed fields are automatically included in read/list responses.
 
 ---
 
+## Stored Row vs Response Shape
+
+A model's `schema` is its public shape: what OpenAPI documents, what request
+bodies validate against, and what responses carry. The row the adapter reads
+can be wider — a column that must never leave the server, or a JSON text column
+the schema declares as an array. With a Drizzle `table`, hono-crud types that
+row as `table.$inferSelect` (`InferModelRow<typeof Model>`); other adapters fall
+back to the schema type.
+
+- `serializer`, `computedFields`, `policies`, and every `after` hook receive the
+  **row**.
+- Responses are **projected** onto the schema's fields (plus computed fields,
+  relations, and managed timestamp / soft-delete / version columns) after the
+  serializer runs, so an undeclared column never reaches the client — even when
+  a serializer spreads the row. `transform` receives that projected shape.
+
+```typescript
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+const attachmentsTable = sqliteTable('attachments', {
+  id: text('id').primaryKey(),
+  filename: text('filename').notNull(),
+  r2Key: text('r2_key').notNull(), // server-only
+  tags: text('tags').notNull(), // JSON text
+});
+
+const AttachmentModel = defineModel({
+  tableName: 'attachments',
+  schema: z.object({ id: z.string(), filename: z.string(), tags: z.array(z.string()) }),
+  primaryKeys: ['id'],
+  table: attachmentsTable,
+  // `row` is the table row: `row.tags` is the JSON text, `row.r2Key` is readable.
+  // Spreading the row is safe — the projection drops `r2Key` from the response.
+  serializer: (row) => ({ ...row, tags: JSON.parse(row.tags) as string[] }),
+});
+```
+
+---
+
 ## Field Selection
 
 Allow clients to select which fields to return.

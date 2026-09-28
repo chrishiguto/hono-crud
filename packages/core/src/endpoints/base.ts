@@ -90,6 +90,19 @@ type SchemaOf<M extends MetaInput> = M['model']['schema'];
 type RowOf<M extends MetaInput> = InferModelRow<M['model']>;
 
 /**
+ * Keep only `fields` on a plain-object record; anything else (a serializer
+ * that returns a string, an array) passes through untouched.
+ */
+function projectFields(value: unknown, fields: ReadonlySet<string>): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) {
+    if (fields.has(key)) out[key] = field;
+  }
+  return out;
+}
+
+/**
  * Type predicate: does `o` expose a `getBodySchema()` method? Endpoints
  * with a request body (Create / Update / Upsert / Clone / Batch* /
  * Import) implement it; Read / List / Delete don't. Localising the
@@ -594,11 +607,18 @@ export abstract class CrudEndpoint<
 
   /**
    * Deterministic read-shaping tail shared by every record-returning verb:
-   * `computed fields → serializer → serialization profile → transform →
-   * field selection`. Each step runs only when the model/endpoint configured
-   * it. This is the single source of truth for the chain that was previously
-   * copy-pasted across ~14 endpoints — where omitting `applyProfile` silently
-   * leaked fields the profile was meant to strip.
+   * `computed fields → serializer → projection → serialization profile →
+   * transform → field selection`. Each optional step runs only when the
+   * model/endpoint configured it; the projection always runs. This is the
+   * single source of truth for the chain that was previously copy-pasted
+   * across ~14 endpoints — where omitting `applyProfile` silently leaked
+   * fields the profile was meant to strip.
+   *
+   * The projection keeps only {@link getProjectedFields}: the row can be wider
+   * than the schema (a bucket key, a password hash, the text behind a JSON
+   * column), and the schema is what OpenAPI documents, so a column the schema
+   * leaves out never reaches the client — even when a serializer spreads the
+   * row. `transform` therefore receives the public shape.
    *
    * `decrypt`, policy reads, and the user `after` hook stay in each verb's
    * `handle()` — they aren't uniform across verbs and run before this tail.
@@ -613,8 +633,9 @@ export abstract class CrudEndpoint<
       obj = await applyComputedFields(obj, model.computedFields);
     }
     const serialized = model.serializer ? model.serializer(obj as RowOf<M>) : obj;
-    const profiled = this.applyProfile(serialized as Record<string, unknown>);
-    const transformed = this.transform(profiled as RowOf<M>);
+    const projected = projectFields(serialized, this.getProjectedFields());
+    const profiled = this.applyProfile(projected as Record<string, unknown>);
+    const transformed = this.transform(profiled);
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
       return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
     }
@@ -633,8 +654,10 @@ export abstract class CrudEndpoint<
     }
     const serializer = model.serializer;
     const serialized = serializer ? items.map((i) => serializer(i as RowOf<M>)) : items;
-    const profiled = this.applyProfileToArray(serialized as Record<string, unknown>[]);
-    const transformed = profiled.map((i) => this.transform(i as RowOf<M>));
+    const projectedFields = this.getProjectedFields();
+    const projected = serialized.map((i) => projectFields(i, projectedFields));
+    const profiled = this.applyProfileToArray(projected as Record<string, unknown>[]);
+    const transformed = profiled.map((i) => this.transform(i));
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
       return applyFieldSelectionToArray(transformed as Record<string, unknown>[], fieldSelection);
     }
@@ -745,9 +768,10 @@ export abstract class CrudEndpoint<
   protected defaultSelectFields: string[] = [];
 
   /**
-   * Gets the list of fields available for selection.
+   * Keys a response record may carry — the shape OpenAPI documents: the
+   * (per-request) schema's fields, computed fields, and relation names.
    */
-  protected getAvailableSelectFields(): string[] {
+  protected getResponseFields(): string[] {
     const schemaFields = Object.keys(this.getModelSchema().shape);
     const computedFields = this._meta.model.computedFields
       ? Object.keys(this._meta.model.computedFields)
@@ -755,8 +779,32 @@ export abstract class CrudEndpoint<
     const relationFields = this._meta.model.relations
       ? Object.keys(this._meta.model.relations)
       : [];
+    return [...schemaFields, ...computedFields, ...relationFields];
+  }
 
-    let available = [...schemaFields, ...computedFields, ...relationFields];
+  /**
+   * {@link getResponseFields} plus the columns the engine manages for this
+   * model (timestamps, soft-delete marker, version), which the model opted
+   * into and may name outside its schema (`timestamps: true` with no
+   * `createdAt` in the schema). The finalize projection keeps these.
+   */
+  private getProjectedFields(): Set<string> {
+    const fields = new Set(this.getResponseFields());
+    const timestamps = getTimestampsConfig(this._meta.model.timestamps);
+    if (timestamps.enabled) {
+      fields.add(timestamps.createdAt);
+      fields.add(timestamps.updatedAt);
+    }
+    if (this.isSoftDeleteEnabled()) fields.add(this.getSoftDeleteConfig().field);
+    if (this.isVersioningEnabled()) fields.add(this.getVersioningConfig().field);
+    return fields;
+  }
+
+  /**
+   * Gets the list of fields available for selection.
+   */
+  protected getAvailableSelectFields(): string[] {
+    let available = this.getResponseFields();
 
     // Filter to allowed fields if specified
     if (this.allowedSelectFields.length > 0) {

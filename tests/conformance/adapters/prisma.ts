@@ -102,9 +102,16 @@ const tenantModel = defineModel({
 });
 const tenantMeta = defineMeta({ model: tenantModel });
 
+// The finalize model leaves the leg's tenant column out of its schema, and its
+// create verbs stamp it on insert: the row carries a server-only column the
+// schema never declares, which no response may echo (the finalize cell).
+const finalizeSchema = schema.omit({ status: true });
+type FinalizeItem = z.infer<typeof finalizeSchema>;
+const SERVER_ONLY_VALUE = 'pending';
+
 const finalizeModel = defineModel({
   tableName: TABLE,
-  schema,
+  schema: finalizeSchema,
   primaryKeys: ['id'],
   softDelete: { field: 'deletedAt' },
   serializationProfile: { name: 'conformance', exclude: ['age'] },
@@ -271,6 +278,10 @@ async function setup(): Promise<AdapterContext> {
   class FinalizeCreate extends PrismaCreateEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+
+    override async before(data: FinalizeItem): Promise<FinalizeItem> {
+      return { ...data, status: SERVER_ONLY_VALUE } as FinalizeItem;
+    }
   }
   class FinalizeRead extends PrismaReadEndpoint {
     _meta = finalizeMeta;
@@ -283,6 +294,10 @@ async function setup(): Promise<AdapterContext> {
   class FinalizeBatchCreate extends PrismaBatchCreateEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+
+    override async before(data: Partial<FinalizeItem>): Promise<Partial<FinalizeItem>> {
+      return { ...data, status: SERVER_ONLY_VALUE } as Partial<FinalizeItem>;
+    }
   }
   class FinalizeBatchDelete extends PrismaBatchDeleteEndpoint {
     _meta = finalizeMeta;
