@@ -17,6 +17,7 @@ import {
   type ListFilterParseOptions,
   type ListFilters,
   type ModelObject,
+  boundedPageSize,
   pagingQueryShape,
   parseListFilters,
   sortQueryShape,
@@ -188,11 +189,7 @@ export abstract class ListEndpoint<
       // Bounded like `per_page`, but never defaulted: a present `limit` is
       // what starts a cursor walk (`parseListFilters`), so a default would
       // turn every request into one.
-      shape.limit = z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(this.maxPerPage)
+      shape.limit = boundedPageSize(this.maxPerPage)
         .optional()
         .meta({ description: 'Number of items to return (cursor pagination)' });
     }

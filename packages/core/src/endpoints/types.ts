@@ -210,6 +210,16 @@ export function parseFilterValue(value: string): { operator: FilterOperator; val
 }
 
 /**
+ * A page-size query param: a coerced integer from 1 up to `max`. The one
+ * definition behind `per_page` (defaulted) and the cursor `limit` (never
+ * defaulted, since a present `limit` is what starts a cursor walk), so both
+ * state and enforce the same ceiling.
+ */
+export function boundedPageSize(max: number) {
+  return z.coerce.number().int().min(1).max(max);
+}
+
+/**
  * The `page` / `per_page` query params of every offset-paginated endpoint.
  * Declared as coerced, bounded integers so the OpenAPI document carries the
  * endpoint's default page size and ceiling, and a generated client can read
@@ -221,7 +231,7 @@ export function parseFilterValue(value: string): { operator: FilterOperator; val
 export function pagingQueryShape(defaultPerPage: number, maxPerPage: number) {
   return {
     page: z.coerce.number().int().min(1).default(1),
-    per_page: z.coerce.number().int().min(1).max(maxPerPage).default(defaultPerPage),
+    per_page: boundedPageSize(maxPerPage).default(defaultPerPage),
   };
 }
 
