@@ -416,7 +416,7 @@ export function parseListFilters(
     }
   }
 
-  // Apply defaults (paging defaults come from the paging schema above)
+  // Only sort needs defaulting here; the paging schema parse already defaulted paging.
   if (!options.order_by && defaultSort?.field) options.order_by = defaultSort.field;
   if (!options.order_by_direction) options.order_by_direction = defaultSort?.order ?? 'asc';
 

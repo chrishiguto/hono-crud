@@ -140,9 +140,9 @@ export abstract class BulkPatchEndpoint<
     const dryRunParam = ctx.req.query('dryRun');
     const dryRun = dryRunParam === 'true' || dryRunParam === '1';
 
-    // Parse filters from query params. A bulk patch never pages (adapters
-    // read only `filters.filters`), so paging params are dropped rather than
-    // validated: a param the endpoint ignores must not be able to refuse it.
+    // A bulk patch never pages (adapters read only `filters.filters`), so
+    // paging params are dropped rather than validated: a param the endpoint
+    // ignores must not be able to refuse it.
     const { page: _page, per_page: _perPage, ...filterQuery } = ctx.req.query();
     const filters = parseListFilters(filterQuery, {
       filterFields: this.filterFields,
