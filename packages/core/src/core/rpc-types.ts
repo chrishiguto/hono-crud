@@ -281,17 +281,22 @@ export type CrudCreateInput<C> = CrudMetaOf<C> extends { fields: infer F }
 /** The update request body of a CRUD endpoint class (`fields.partial()`). */
 export type CrudUpdateInput<C> = Partial<CrudCreateInput<C>>;
 
-/** Query string accepted by list endpoints (filters are open-ended). */
+/**
+ * Query string accepted by list endpoints (filters are open-ended). Paging
+ * params take numbers or numeric strings: the endpoint coerces both, and hc
+ * stringifies values when it builds the URL.
+ */
 export interface CrudListQuery {
-  page?: string;
-  per_page?: string;
+  page?: number | string;
+  per_page?: number | string;
   sort?: string;
   order?: 'asc' | 'desc';
   search?: string;
   include?: string;
   fields?: string;
   cursor?: string;
-  [filter: string]: string | undefined;
+  limit?: number | string;
+  [filter: string]: number | string | undefined;
 }
 
 /** Query string accepted by read endpoints. */
@@ -303,10 +308,10 @@ export interface CrudReadQuery {
 /** Query string accepted by search endpoints. */
 export interface CrudSearchQuery {
   q?: string;
-  page?: string;
-  per_page?: string;
+  page?: number | string;
+  per_page?: number | string;
   fields?: string;
-  [filter: string]: string | undefined;
+  [filter: string]: number | string | undefined;
 }
 
 /** Result body of delete endpoints. */
