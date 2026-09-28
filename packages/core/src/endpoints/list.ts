@@ -191,9 +191,16 @@ export abstract class ListEndpoint<
         description:
           'Opaque cursor for fetching the next page. During a cursor walk, results are ordered by the cursor field ascending and sort/order are ignored.',
       });
-      shape.limit = z.string().optional().meta({
-        description: 'Number of items to return (cursor pagination)',
-      });
+      // Bounded like `per_page`, but never defaulted: a present `limit` is
+      // what starts a cursor walk (`parseListFilters`), so a default would
+      // turn every request into one.
+      shape.limit = z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(this.maxPerPage)
+        .optional()
+        .meta({ description: 'Number of items to return (cursor pagination)' });
     }
 
     return z.object(shape) as ZodObject<ZodRawShape>;
