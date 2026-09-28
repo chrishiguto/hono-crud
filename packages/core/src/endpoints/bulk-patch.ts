@@ -255,7 +255,6 @@ export abstract class BulkPatchEndpoint<
     // Mutation changes which rows a cached list/read would return.
     await this.invalidateModelCache();
 
-    // Returned rows run the shared finalize chain, like every other verb's.
     const records =
       this.returnRecords && bulkResult.records
         ? await this.finalizeArray(bulkResult.records)

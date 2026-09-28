@@ -816,7 +816,6 @@ export abstract class ImportEndpoint<
       );
     }
 
-    // Imported rows run the shared finalize chain, like every other verb's.
     const importResult: ImportResult<unknown> = {
       summary,
       results: await Promise.all(

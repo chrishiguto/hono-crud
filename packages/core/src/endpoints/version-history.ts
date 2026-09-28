@@ -639,7 +639,6 @@ export abstract class VersionRollbackEndpoint<
       result as Record<string, unknown>,
     )) as InferModelRow<M['model']>;
 
-    // computed fields → serializer → projection → profile → transform
     return this.success(await this.finalizeRecord(decrypted));
   }
 }

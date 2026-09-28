@@ -590,10 +590,9 @@ export abstract class CrudEndpoint<
    * Deterministic read-shaping chain shared by every record-returning verb:
    * `computed fields → serializer → projection → serialization profile →
    * transform → field selection`. Each optional step runs only when the
-   * model/endpoint configured it; the projection always runs. This is the
-   * single source of truth for the chain that was previously copy-pasted
-   * across ~14 endpoints — where omitting `applyProfile` silently leaked
-   * fields the profile was meant to strip.
+   * model/endpoint configured it; the projection always runs. Every verb goes
+   * through this one chain so none can skip a step — a verb that omits
+   * `applyProfile` silently leaks the fields the profile is meant to strip.
    *
    * The projection keeps only {@link getResponseProjection}: the row can be wider
    * than the schema (a bucket key, a password hash, the text behind a JSON
@@ -808,9 +807,6 @@ export abstract class CrudEndpoint<
     return { fields, relations };
   }
 
-  /**
-   * Gets the list of fields available for selection.
-   */
   protected getAvailableSelectFields(): string[] {
     let available = this.getResponseFields();
 

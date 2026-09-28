@@ -1,5 +1,5 @@
 /**
- * Compile-time assertions for the stored-row type (kshdotdev/hono-crud#147).
+ * Compile-time assertions for the stored-row type.
  *
  * Checked by `pnpm run typecheck:types` (tsc only — never executed). A model's
  * `schema` is its public shape; the row the adapter reads can be wider (a

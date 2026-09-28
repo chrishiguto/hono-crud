@@ -3,12 +3,11 @@
  *
  * The finalize model variant declares:
  * - `serializationProfile: { exclude: ['age'] }` — `age` must never appear
- *   in a response, and
- * - a computed field `nameUpper` — must always appear.
- *
+ *   in a response,
+ * - a computed field `nameUpper` — must always appear, and
  * - no tenant column in its schema, while its create verbs stamp one on the
  *   row — a server-only column (bucket key, password hash) that must never
- *   appear in a response, with or without a serializer (hono-crud#147).
+ *   appear in a response, with or without a serializer.
  *
  * All must hold IDENTICALLY on create, read, list, batchCreate, and
  * batchDelete responses (batchDelete previously skipped the shared
