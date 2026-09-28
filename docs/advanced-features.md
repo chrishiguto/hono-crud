@@ -1235,7 +1235,9 @@ GET /users?page=2&per_page=50
 defaults to 1, `per_page` to `defaultPerPage`), so a generated client reads the
 page size and ceiling instead of restating them. The same schema validates the
 request: `?per_page=500` against a ceiling of 100, `?page=0` or
-`?per_page=abc` answer 400 `VALIDATION_ERROR` rather than being clamped.
+`?per_page=abc` answer 400 `VALIDATION_ERROR` rather than being clamped. An
+empty value (`?per_page=`) reads as 0 and is refused too, so omit a param
+rather than sending it blank.
 Export reads every record up to `maxExportRecords` and takes no paging params.
 
 `sort` and `order` carry their defaults in the document too: `order` defaults

@@ -147,7 +147,7 @@ export function registerCursorPaginationCells(
   test('cursor pagination: limit outside the documented bounds is refused, never clamped', async () => {
     const { app } = ctx();
 
-    for (const query of ['limit=101', 'limit=0', 'limit=abc', 'limit=2.5']) {
+    for (const query of ['limit=101', 'limit=0', 'limit=abc', 'limit=2.5', 'limit=']) {
       await expectError(await app.request(`${BASE}?${query}`), 400, 'VALIDATION_ERROR');
     }
   });
