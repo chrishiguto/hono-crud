@@ -718,7 +718,8 @@ describe('header forwarding', () => {
       listTarget,
       {},
       {
-        'X-API-Key': 'key-1', // matched case-insensitively
+        // Header names are matched case-insensitively.
+        'X-API-Key': 'key-1',
         'x-tenant-id': 'tenant-1',
         authorization: 'Bearer tok',
         'x-custom': 'nope',

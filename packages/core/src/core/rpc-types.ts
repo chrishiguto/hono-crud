@@ -316,7 +316,7 @@ export interface CrudSearchQuery {
   page?: number | string;
   per_page?: number | string;
   fields?: string;
-  /** Filters; numbers are accepted for the same reason as on `CrudListQuery`. */
+  /** Filters; numbers are accepted because the index signature must admit `page` / `per_page`. */
   [filter: string]: number | string | undefined;
 }
 
