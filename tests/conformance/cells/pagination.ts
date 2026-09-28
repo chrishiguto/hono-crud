@@ -102,4 +102,12 @@ export function registerPaginationCells(_descriptor: AdapterDescriptor, ctx: Ctx
     const response = await app.request('/items/export?per_page=500&page=0');
     expect(response.status).toBe(200);
   });
+
+  test('offset pagination: search refuses page/per_page outside the documented bounds', async () => {
+    const { app } = ctx();
+
+    for (const query of ['per_page=101', 'per_page=0', 'per_page=abc', 'page=0']) {
+      await expectError(await app.request(`/items/search?q=a&${query}`), 400, 'VALIDATION_ERROR');
+    }
+  });
 }

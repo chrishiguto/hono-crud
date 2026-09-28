@@ -1,4 +1,4 @@
-import { MemoryExportEndpoint, MemoryListEndpoint } from '@hono-crud/memory';
+import { MemoryExportEndpoint, MemoryListEndpoint, MemorySearchEndpoint } from '@hono-crud/memory';
 import { Hono } from 'hono';
 import { fromHono, registerCrud } from 'hono-crud';
 import type { MetaInput, Model } from 'hono-crud';
@@ -23,6 +23,12 @@ class ItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
   protected override defaultPerPage = 25;
   protected override maxPerPage = 50;
 }
+class ItemSearch extends MemorySearchEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+  protected override searchFields = ['name'];
+  protected override defaultPerPage = 10;
+  protected override maxPerPage = 30;
+}
 class ItemExport extends MemoryExportEndpoint<Record<string, never>, ItemMeta> {
   _meta = itemMeta;
 }
@@ -45,6 +51,7 @@ beforeAll(async () => {
   const app = fromHono(new Hono());
   registerCrud(app, '/items', {
     list: ItemList as never,
+    search: ItemSearch as never,
     export: ItemExport as never,
   });
   app.doc('/openapi.json', { openapi: '3.1.0', info: { title: 'paging', version: '1.0.0' } });
@@ -68,5 +75,21 @@ describe('list query schema', () => {
   it('leaves page and per_page out of the export query', () => {
     expect(queryParam('/items/export', 'page')).toBeUndefined();
     expect(queryParam('/items/export', 'per_page')).toBeUndefined();
+  });
+});
+
+describe('search query schema', () => {
+  it('declares page and per_page with the search endpoint bounds and defaults', () => {
+    expect(queryParam('/items/search', 'page')).toEqual({
+      type: 'integer',
+      minimum: 1,
+      default: 1,
+    });
+    expect(queryParam('/items/search', 'per_page')).toEqual({
+      type: 'integer',
+      minimum: 1,
+      maximum: 30,
+      default: 10,
+    });
   });
 });

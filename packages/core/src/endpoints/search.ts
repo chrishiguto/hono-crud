@@ -27,6 +27,7 @@ import {
   type ListFilterParseOptions,
   type ListFilters,
   type ModelObject,
+  pagingQueryShape,
   parseListFilters,
 } from './types';
 
@@ -252,9 +253,7 @@ export abstract class SearchEndpoint<
         description: 'Minimum relevance score threshold (0-1)',
       }),
 
-      // Pagination
-      page: z.string().optional(),
-      per_page: z.string().optional(),
+      ...pagingQueryShape(this.defaultPerPage, this.maxPerPage),
     };
 
     // Sorting
