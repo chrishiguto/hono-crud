@@ -173,19 +173,18 @@ export abstract class ExportEndpoint<
   }
 
   /**
-   * Prepares records for export by applying field exclusions.
+   * Prepares records for export: keeps the response fields (a stored column
+   * the schema leaves out is never exported, same as every other read) minus
+   * `excludedExportFields`.
    */
   protected prepareRecordsForExport(
     records: InferModelRow<M['model']>[],
   ): Record<string, unknown>[] {
-    if (this.excludedExportFields.length === 0) {
-      return records as Record<string, unknown>[];
-    }
-
+    const { fields } = this.getResponseProjection();
     return records.map((record) => {
       const filtered: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(record as Record<string, unknown>)) {
-        if (!this.excludedExportFields.includes(key)) {
+        if (fields.has(key) && !this.excludedExportFields.includes(key)) {
           filtered[key] = value;
         }
       }

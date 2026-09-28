@@ -90,14 +90,43 @@ type SchemaOf<M extends MetaInput> = M['model']['schema'];
 type RowOf<M extends MetaInput> = InferModelRow<M['model']>;
 
 /**
- * Keep only `fields` on a plain-object record; anything else (a serializer
- * that returns a string, an array) passes through untouched.
+ * The keys a response record may carry, and for each included relation that
+ * declares a `schema`, the keys its related rows may carry.
  */
-function projectFields(value: unknown, fields: ReadonlySet<string>): unknown {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+interface ResponseProjection {
+  fields: ReadonlySet<string>;
+  relations: ReadonlyMap<string, ReadonlySet<string>>;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function pickFields(value: unknown, fields: ReadonlySet<string>): unknown {
+  if (!isPlainRecord(value)) return value;
   const out: Record<string, unknown> = {};
   for (const [key, field] of Object.entries(value)) {
     if (fields.has(key)) out[key] = field;
+  }
+  return out;
+}
+
+/**
+ * Keep only the projection's keys on a plain-object record, and project each
+ * included relation's rows onto its schema. Anything that is not a plain
+ * object (a serializer that returns a string, an array) passes through.
+ */
+function projectRecord(value: unknown, projection: ResponseProjection): unknown {
+  if (!isPlainRecord(value)) return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(value)) {
+    if (!projection.fields.has(key)) continue;
+    const related = projection.relations.get(key);
+    out[key] = !related
+      ? field
+      : Array.isArray(field)
+        ? field.map((row) => pickFields(row, related))
+        : pickFields(field, related);
   }
   return out;
 }
@@ -614,7 +643,7 @@ export abstract class CrudEndpoint<
    * across ~14 endpoints — where omitting `applyProfile` silently leaked
    * fields the profile was meant to strip.
    *
-   * The projection keeps only {@link getProjectedFields}: the row can be wider
+   * The projection keeps only {@link getResponseProjection}: the row can be wider
    * than the schema (a bucket key, a password hash, the text behind a JSON
    * column), and the schema is what OpenAPI documents, so a column the schema
    * leaves out never reaches the client — even when a serializer spreads the
@@ -633,13 +662,21 @@ export abstract class CrudEndpoint<
       obj = await applyComputedFields(obj, model.computedFields);
     }
     const serialized = model.serializer ? model.serializer(obj as RowOf<M>) : obj;
-    const projected = projectFields(serialized, this.getProjectedFields());
+    const projected = projectRecord(serialized, this.getResponseProjection());
     const profiled = this.applyProfile(projected as Record<string, unknown>);
     const transformed = this.transform(profiled);
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
       return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
     }
     return transformed;
+  }
+
+  /**
+   * The finalize chain's projection step alone, for verbs that run their own
+   * serializer tail (batch upsert applies computed fields early, for events).
+   */
+  protected projectResponse(serialized: unknown): unknown {
+    return projectRecord(serialized, this.getResponseProjection());
   }
 
   /** Array variant of {@link finalizeRecord}. Same ordered chain, per element. */
@@ -654,8 +691,8 @@ export abstract class CrudEndpoint<
     }
     const serializer = model.serializer;
     const serialized = serializer ? items.map((i) => serializer(i as RowOf<M>)) : items;
-    const projectedFields = this.getProjectedFields();
-    const projected = serialized.map((i) => projectFields(i, projectedFields));
+    const projection = this.getResponseProjection();
+    const projected = serialized.map((i) => projectRecord(i, projection));
     const profiled = this.applyProfileToArray(projected as Record<string, unknown>[]);
     const transformed = profiled.map((i) => this.transform(i));
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
@@ -783,21 +820,29 @@ export abstract class CrudEndpoint<
   }
 
   /**
-   * {@link getResponseFields} plus the columns the engine manages for this
-   * model (timestamps, soft-delete marker, version), which the model opted
-   * into and may name outside its schema (`timestamps: true` with no
-   * `createdAt` in the schema). The finalize projection keeps these.
+   * What a response may carry: {@link getResponseFields} plus the columns the
+   * engine manages for this model (timestamps, soft-delete marker, version),
+   * which the model opted into and may name outside its schema
+   * (`timestamps: true` with no `createdAt` in the schema). An included
+   * relation that declares a `schema` has its rows projected onto it; one
+   * without a schema documents no shape to project onto and passes through.
    */
-  private getProjectedFields(): Set<string> {
+  protected getResponseProjection(): ResponseProjection {
+    const model = this._meta.model;
     const fields = new Set(this.getResponseFields());
-    const timestamps = getTimestampsConfig(this._meta.model.timestamps);
+    const timestamps = getTimestampsConfig(model.timestamps);
     if (timestamps.enabled) {
       fields.add(timestamps.createdAt);
       fields.add(timestamps.updatedAt);
     }
     if (this.isSoftDeleteEnabled()) fields.add(this.getSoftDeleteConfig().field);
     if (this.isVersioningEnabled()) fields.add(this.getVersioningConfig().field);
-    return fields;
+
+    const relations = new Map<string, ReadonlySet<string>>();
+    for (const [name, relation] of Object.entries(model.relations ?? {})) {
+      if (relation.schema) relations.set(name, new Set(Object.keys(relation.schema.shape)));
+    }
+    return { fields, relations };
   }
 
   /**

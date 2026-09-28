@@ -119,4 +119,64 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
       'Widget Three',
     );
   });
+
+  test('finalize projection: export, batchUpsert and ?include= never echo a column the schema leaves out', async () => {
+    const { app } = ctx();
+
+    const parent = await createRecord(app, '/finalize-items', {
+      name: 'Parent',
+      email: 'projection-parent@conformance.test',
+      role: 'user',
+      age: 50,
+    });
+    expect(serverOnlyField in parent).toBe(false);
+
+    // export (buffered JSON and CSV) reads through the adapter `list`, not the
+    // finalize chain — its columns come from the stored row.
+    const exported = await expectSuccess<{ data: ConformanceRecord[]; count: number }>(
+      await app.request('/finalize-items/export?format=json'),
+      200,
+    );
+    expect(exported.count).toBe(1);
+    expect(serverOnlyField in exported.data[0]!).toBe(false);
+    expect(exported.data[0]!.email).toBe('projection-parent@conformance.test');
+
+    const csv = await app.request('/finalize-items/export?format=csv');
+    expect(csv.status).toBe(200);
+    const header = (await csv.text()).split('\n')[0]!.split(',');
+    expect(header).toContain('email');
+    expect(header).not.toContain(serverOnlyField);
+
+    // batchUpsert runs its own serializer tail after early computed fields.
+    const upsert = await app.request(
+      '/finalize-items/batch/upsert',
+      jsonInit('POST', [
+        { name: 'Parent Renamed', email: 'projection-parent@conformance.test', role: 'user' },
+      ]),
+    );
+    expect(upsert.status).toBe(200);
+    const upserted = await readJson<{
+      success: true;
+      result: { items: Array<{ data: ConformanceRecord }> };
+    }>(upsert);
+    expect(upserted.result.items[0]!.data.name).toBe('Parent Renamed');
+    expect(serverOnlyField in upserted.result.items[0]!.data).toBe(false);
+
+    if (!descriptor.capabilities.relationScoping) return;
+
+    // ?include= attaches related rows as stored; the relation's `schema` is
+    // what OpenAPI documents for them.
+    const child = await createRecord(app, '/finalize-items', {
+      name: 'Child',
+      email: 'projection-child@conformance.test',
+      role: 'user',
+      parentId: parent.id,
+    });
+    const read = await expectSuccess<ConformanceRecord & { parent: ConformanceRecord | null }>(
+      await app.request(`/finalize-items/${child.id}?include=parent`),
+      200,
+    );
+    expect(read.parent?.name).toBe('Parent Renamed');
+    expect(serverOnlyField in (read.parent as ConformanceRecord)).toBe(false);
+  });
 }

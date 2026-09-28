@@ -193,6 +193,16 @@ const finalizeModel = defineModel({
   softDelete: { field: 'deletedAt' },
   timestamps: true,
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  relations: {
+    parent: {
+      type: 'belongsTo',
+      model: TABLE,
+      table: itemsTable,
+      foreignKey: 'parentId',
+      localKey: 'id',
+      schema: finalizeSchema,
+    },
+  },
   computedFields: {
     nameUpper: {
       schema: z.string(),
@@ -368,6 +378,8 @@ class FinalizeCreate extends DrizzleCreateEndpoint {
 class FinalizeRead extends DrizzleReadEndpoint {
   _meta = finalizeMeta;
   db = DB;
+
+  protected override allowedIncludes = ['parent'];
 }
 class FinalizeList extends DrizzleListEndpoint {
   _meta = finalizeMeta;
@@ -384,6 +396,15 @@ class FinalizeBatchCreate extends DrizzleBatchCreateEndpoint {
 class FinalizeBatchDelete extends DrizzleBatchDeleteEndpoint {
   _meta = finalizeMeta;
   db = DB;
+}
+class FinalizeExport extends DrizzleExportEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+}
+class FinalizeBatchUpsert extends DrizzleBatchUpsertEndpoint {
+  _meta = finalizeMeta;
+  db = DB;
+  protected override upsertKeys = ['email'];
 }
 
 // Encryption endpoint classes — every write/returning verb on the enc model.
@@ -725,6 +746,8 @@ async function setup(): Promise<AdapterContext> {
     read: FinalizeRead,
     batchCreate: FinalizeBatchCreate,
     batchDelete: FinalizeBatchDelete,
+    export: FinalizeExport,
+    batchUpsert: FinalizeBatchUpsert,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });

@@ -120,6 +120,15 @@ const finalizeModel = defineModel({
   softDelete: { field: 'deletedAt' },
   timestamps: true,
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  relations: {
+    parent: {
+      type: 'belongsTo',
+      model: TABLE,
+      foreignKey: 'parentId',
+      localKey: 'id',
+      schema: finalizeSchema,
+    },
+  },
   computedFields: {
     nameUpper: {
       schema: z.string(),
@@ -334,6 +343,8 @@ class FinalizeCreate extends MemoryCreateEndpoint {
 }
 class FinalizeRead extends MemoryReadEndpoint {
   _meta = finalizeMeta;
+
+  protected override allowedIncludes = ['parent'];
 }
 class FinalizeList extends MemoryListEndpoint {
   _meta = finalizeMeta;
@@ -347,6 +358,13 @@ class FinalizeBatchCreate extends MemoryBatchCreateEndpoint {
 }
 class FinalizeBatchDelete extends MemoryBatchDeleteEndpoint {
   _meta = finalizeMeta;
+}
+class FinalizeExport extends MemoryExportEndpoint {
+  _meta = finalizeMeta;
+}
+class FinalizeBatchUpsert extends MemoryBatchUpsertEndpoint {
+  _meta = finalizeMeta;
+  protected override upsertKeys = ['email'];
 }
 
 // Encryption endpoint classes — every write/returning verb on the enc model.
@@ -514,6 +532,8 @@ async function setup(): Promise<AdapterContext> {
     read: FinalizeRead,
     batchCreate: FinalizeBatchCreate,
     batchDelete: FinalizeBatchDelete,
+    export: FinalizeExport,
+    batchUpsert: FinalizeBatchUpsert,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });

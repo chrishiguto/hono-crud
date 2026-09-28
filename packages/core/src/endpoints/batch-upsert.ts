@@ -559,17 +559,19 @@ export abstract class BatchUpsertEndpoint<
       );
     }
 
-    // serializer → profile → transform per item (computed already applied above).
-    // Profile + transform were previously skipped here — running them closes the
-    // same serialization-profile leak fixed across the other write endpoints.
+    // serializer → projection → profile → transform per item (computed already
+    // applied above) — the finalize chain's order, so a column the schema leaves
+    // out never reaches the response here either.
     result.items = result.items.map((item) => {
       const serialized = this._meta.model.serializer
         ? this._meta.model.serializer(item.data)
         : item.data;
-      const profiled = this.applyProfile(serialized as Record<string, unknown>);
+      const profiled = this.applyProfile(
+        this.projectResponse(serialized) as Record<string, unknown>,
+      );
       return {
         ...item,
-        data: this.transform(profiled as InferModelRow<M['model']>) as InferModelRow<M['model']>,
+        data: this.transform(profiled) as InferModelRow<M['model']>,
       };
     });
 

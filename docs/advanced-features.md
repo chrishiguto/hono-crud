@@ -655,7 +655,9 @@ back to the schema type.
 - Responses are **projected** onto the schema's fields (plus computed fields,
   relations, and managed timestamp / soft-delete / version columns) after the
   serializer runs, so an undeclared column never reaches the client — even when
-  a serializer spreads the row. `transform` receives that projected shape.
+  a serializer spreads the row. `transform` receives that projected shape. The
+  same rule covers export, version snapshots and diffs, and `?include=` rows of
+  a relation that declares a `schema`.
 
 ```typescript
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';

@@ -303,6 +303,15 @@ async function setup(): Promise<AdapterContext> {
     _meta = finalizeMeta;
     prisma = crudClient;
   }
+  class FinalizeExport extends PrismaExportEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+  }
+  class FinalizeBatchUpsert extends PrismaBatchUpsertEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override upsertKeys = ['email'];
+  }
 
   class HookItemCreate extends PrismaCreateEndpoint {
     _meta = baseMeta;
@@ -457,6 +466,8 @@ async function setup(): Promise<AdapterContext> {
     read: FinalizeRead,
     batchCreate: FinalizeBatchCreate,
     batchDelete: FinalizeBatchDelete,
+    export: FinalizeExport,
+    batchUpsert: FinalizeBatchUpsert,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });

@@ -543,5 +543,66 @@ describe('Record Versioning', () => {
       expect(doc?.title).toBe('Title v1');
       expect(doc?.version).toBe(4);
     });
+
+    it('never returns a stored column the schema leaves out (hono-crud#147)', async () => {
+      // A snapshot is the stored row, so a server-only column rides along in
+      // `data` and in `changes` unless the response projects it away.
+      const secretId = crypto.randomUUID();
+      getStore<Record<string, unknown>>('documents').set(secretId, {
+        id: secretId,
+        title: 'Secret v2',
+        content: 'c',
+        version: 2,
+        storageKey: 'bucket/key-v2',
+      });
+      for (let i = 1; i <= 2; i++) {
+        await versioningStorage.store('documents', {
+          id: `secret-entry-${i}`,
+          recordId: secretId,
+          version: i,
+          data: {
+            id: secretId,
+            title: `Secret v${i}`,
+            content: 'c',
+            version: i,
+            storageKey: `bucket/key-v${i}`,
+          },
+          createdAt: new Date(),
+          changes: [
+            { field: 'title', oldValue: 'x', newValue: `Secret v${i}` },
+            { field: 'storageKey', oldValue: 'x', newValue: `bucket/key-v${i}` },
+          ],
+        });
+      }
+
+      const history = (await (await app.request(`/documents/${secretId}/versions`)).json()) as {
+        result: {
+          versions: Array<{ data: Record<string, unknown>; changes: { field: string }[] }>;
+        };
+      };
+      for (const entry of history.result.versions) {
+        expect(entry.data.title).toMatch(/^Secret v/);
+        expect('storageKey' in entry.data).toBe(false);
+        expect(entry.changes.map((c) => c.field)).toEqual(['title']);
+      }
+
+      const read = (await (await app.request(`/documents/${secretId}/versions/1`)).json()) as {
+        result: { data: Record<string, unknown> };
+      };
+      expect('storageKey' in read.result.data).toBe(false);
+
+      const compare = (await (
+        await app.request(`/documents/${secretId}/versions/compare?from=1&to=2`)
+      ).json()) as { result: { changes: { field: string }[] } };
+      const compared = compare.result.changes.map((c) => c.field);
+      expect(compared).toContain('title');
+      expect(compared).not.toContain('storageKey');
+
+      const rollback = (await (
+        await app.request(`/documents/${secretId}/versions/1/rollback`, { method: 'POST' })
+      ).json()) as { result: Record<string, unknown> };
+      expect(rollback.result.title).toBe('Secret v1');
+      expect('storageKey' in rollback.result).toBe(false);
+    });
   });
 });
