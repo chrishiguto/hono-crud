@@ -1,4 +1,4 @@
-import { MemoryListEndpoint } from '@hono-crud/memory';
+import { MemoryListEndpoint, MemoryVersionHistoryEndpoint } from '@hono-crud/memory';
 import { Hono } from 'hono';
 import { InputValidationException, parseListFilters } from 'hono-crud';
 import type { MetaInput, Model } from 'hono-crud';
@@ -98,5 +98,20 @@ describe('list endpoint mounted without the route validator', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { result_info: { page: number; per_page: number } };
     expect(body.result_info).toMatchObject({ page: 2, per_page: 5 });
+  });
+});
+
+class ItemVersions extends MemoryVersionHistoryEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+}
+
+describe('version history query schema', () => {
+  it('declares limit as an integer from 1 up to maxLimit', () => {
+    const query = new ItemVersions().getSchema().request?.query as z.ZodObject;
+    expect(z.toJSONSchema(query.shape.limit, { io: 'input' })).toMatchObject({
+      type: 'integer',
+      minimum: 1,
+      maximum: 100,
+    });
   });
 });
