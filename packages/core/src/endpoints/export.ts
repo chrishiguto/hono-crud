@@ -98,10 +98,12 @@ export abstract class ExportEndpoint<
 
   /**
    * Returns the query parameter schema for export.
-   * Extends the ListEndpoint schema with format and stream parameters.
+   * Extends the ListEndpoint schema with format and stream parameters, minus
+   * `page` / `per_page`: an export reads every record up to
+   * `maxExportRecords`, so offset paging is neither honored nor advertised.
    */
   protected getExportQuerySchema() {
-    const baseSchema = this.getQuerySchema();
+    const baseSchema = this.getQuerySchema().omit({ page: true, per_page: true });
     return baseSchema.extend({
       format: z.enum(EXPORT_FORMATS).optional().meta({ description: 'Export format' }),
       stream: z.enum(['true', 'false']).optional().meta({

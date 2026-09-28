@@ -18,6 +18,7 @@ import {
   type ListFilterParseOptions,
   type ListFilters,
   type ModelObject,
+  pagingQueryShape,
   parseListFilters,
 } from './types';
 
@@ -140,8 +141,7 @@ export abstract class ListEndpoint<
   protected getQuerySchema(): ZodObject<ZodRawShape> {
     // Use Record for mutable shape building (ZodRawShape is readonly in Zod v4)
     const shape: Record<string, z.ZodTypeAny> = {
-      page: z.string().optional(),
-      per_page: z.string().optional(),
+      ...pagingQueryShape(this.defaultPerPage, this.maxPerPage),
     };
 
     if (this.sortFields.length > 0) {

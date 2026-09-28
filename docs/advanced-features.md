@@ -1230,6 +1230,14 @@ GET /users?sort=name&order=asc
 GET /users?page=2&per_page=50
 ```
 
+`page` and `per_page` are integers from 1, and `per_page` is capped at
+`maxPerPage`. The OpenAPI document states both with their defaults (`page`
+defaults to 1, `per_page` to `defaultPerPage`), so a generated client reads the
+page size and ceiling instead of restating them. The same schema validates the
+request: `?per_page=500` against a ceiling of 100, `?page=0` or
+`?per_page=abc` answer 400 `VALIDATION_ERROR` rather than being clamped.
+Export reads every record up to `maxExportRecords` and takes no paging params.
+
 Rows that tie on the sort field are ordered by the primary key in the same
 direction (`ORDER BY name ASC, id ASC`), so a page walk never repeats or skips
 a row, and `order=desc` returns the exact reverse of `order=asc`. Without a
