@@ -225,8 +225,8 @@ export function boundedPageSize(max: number) {
  * endpoint's default page size and ceiling, and a generated client can read
  * them instead of restating them. The same schema validates the request, so
  * a value outside the documented range is refused with a 400, never clamped.
- * (`parseListFilters` still clamps: it is public and also parses raw,
- * unvalidated queries.)
+ * `parseListFilters` parses paging with this shape too, so an endpoint
+ * mounted without the route validator is held to the same bounds.
  */
 export function pagingQueryShape(defaultPerPage: number, maxPerPage: number) {
   return {
@@ -294,34 +294,27 @@ export function parseListFilters(
   }
   Object.assign(allowedFilters, filterConfig);
 
+  // Paging goes through the schema the endpoint documents, not a parser of
+  // its own: a registered endpoint hands over already-validated numbers, and
+  // one mounted without the route validator hands over raw strings that get
+  // the same bounds, defaults and 400 instead of a silent clamp.
+  const pagingShape = {
+    ...pagingQueryShape(defaultPerPage, maxPerPage),
+    ...(cursorPaginationEnabled ? { limit: boundedPageSize(maxPerPage).optional() } : {}),
+  };
+  const paging = z.object(pagingShape).safeParse(query);
+  if (!paging.success) throw InputValidationException.fromZodError(paging.error);
+  Object.assign(options, paging.data);
+
   for (const [key, rawValue] of Object.entries(query)) {
     if (rawValue === undefined || rawValue === null) continue;
+    if (key in pagingShape) continue;
 
     const value = String(rawValue);
 
     // Handle cursor-based pagination
     if (cursorPaginationEnabled && key === 'cursor') {
       options.cursor = value;
-      continue;
-    }
-    if (cursorPaginationEnabled && key === 'limit') {
-      options.limit = Math.min(
-        maxPerPage,
-        Math.max(1, Number.parseInt(value, 10) || defaultPerPage),
-      );
-      continue;
-    }
-
-    // Handle pagination
-    if (key === 'page') {
-      options.page = Math.max(1, Number.parseInt(value, 10) || 1);
-      continue;
-    }
-    if (key === 'per_page') {
-      options.per_page = Math.min(
-        maxPerPage,
-        Math.max(1, Number.parseInt(value, 10) || defaultPerPage),
-      );
       continue;
     }
 
@@ -423,9 +416,7 @@ export function parseListFilters(
     }
   }
 
-  // Apply defaults
-  if (!options.page) options.page = 1;
-  if (!options.per_page) options.per_page = defaultPerPage;
+  // Apply defaults (paging defaults come from the paging schema above)
   if (!options.order_by && defaultSort?.field) options.order_by = defaultSort.field;
   if (!options.order_by_direction) options.order_by_direction = defaultSort?.order ?? 'asc';
 
