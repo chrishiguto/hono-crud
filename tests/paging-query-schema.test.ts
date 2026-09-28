@@ -23,6 +23,11 @@ class ItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
   protected override defaultPerPage = 25;
   protected override maxPerPage = 50;
 }
+class CursorItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+  protected override cursorPaginationEnabled = true;
+  protected override maxPerPage = 40;
+}
 class ItemSearch extends MemorySearchEndpoint<Record<string, never>, ItemMeta> {
   _meta = itemMeta;
   protected override searchFields = ['name'];
@@ -54,6 +59,7 @@ beforeAll(async () => {
     search: ItemSearch as never,
     export: ItemExport as never,
   });
+  registerCrud(app, '/cursor-items', { list: CursorItemList as never });
   app.doc('/openapi.json', { openapi: '3.1.0', info: { title: 'paging', version: '1.0.0' } });
   document = (await (await app.request('/openapi.json')).json()) as OpenApiDocument;
 });
@@ -90,6 +96,17 @@ describe('search query schema', () => {
       minimum: 1,
       maximum: 30,
       default: 10,
+    });
+  });
+});
+
+describe('cursor query schema', () => {
+  it('declares limit as a bounded integer with no default', () => {
+    expect(queryParam('/cursor-items', 'limit')).toEqual({
+      type: 'integer',
+      minimum: 1,
+      maximum: 40,
+      description: 'Number of items to return (cursor pagination)',
     });
   });
 });
