@@ -1,7 +1,7 @@
 import { MemoryExportEndpoint, MemoryListEndpoint, MemorySearchEndpoint } from '@hono-crud/memory';
 import { Hono } from 'hono';
 import { fromHono, registerCrud } from 'hono-crud';
-import type { MetaInput, Model } from 'hono-crud';
+import type { MetaInput, Model, SortSpec } from 'hono-crud';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -22,6 +22,15 @@ class ItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
   _meta = itemMeta;
   protected override defaultPerPage = 25;
   protected override maxPerPage = 50;
+}
+class SortedItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+  protected override sortFields = ['name', 'id'];
+  protected override defaultSort: SortSpec = { field: 'name', order: 'desc' };
+}
+class UnsortedDefaultList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+  protected override sortFields = ['name'];
 }
 class CursorItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
   _meta = itemMeta;
@@ -59,6 +68,8 @@ beforeAll(async () => {
     search: ItemSearch as never,
     export: ItemExport as never,
   });
+  registerCrud(app, '/sorted-items', { list: SortedItemList as never });
+  registerCrud(app, '/unsorted-items', { list: UnsortedDefaultList as never });
   registerCrud(app, '/cursor-items', { list: CursorItemList as never });
   app.doc('/openapi.json', { openapi: '3.1.0', info: { title: 'paging', version: '1.0.0' } });
   document = (await (await app.request('/openapi.json')).json()) as OpenApiDocument;
@@ -108,5 +119,27 @@ describe('cursor query schema', () => {
       maximum: 40,
       description: 'Number of items to return (cursor pagination)',
     });
+  });
+});
+
+describe('sort query schema', () => {
+  it('declares defaultSort as the sort and order defaults', () => {
+    expect(queryParam('/sorted-items', 'sort')).toEqual({
+      type: 'string',
+      enum: ['name', 'id'],
+      default: 'name',
+      description: 'Field to sort by',
+    });
+    expect(queryParam('/sorted-items', 'order')).toEqual({
+      type: 'string',
+      enum: ['asc', 'desc'],
+      default: 'desc',
+      description: 'Sort direction (asc or desc)',
+    });
+  });
+
+  it('declares no sort default without defaultSort, and order defaults to asc', () => {
+    expect(queryParam('/unsorted-items', 'sort')).not.toHaveProperty('default');
+    expect(queryParam('/unsorted-items', 'order')).toMatchObject({ default: 'asc' });
   });
 });

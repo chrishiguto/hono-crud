@@ -9,7 +9,6 @@ import type {
   PaginatedResult,
   SortSpec,
 } from '../core/types';
-import { SORT_DIRECTIONS } from '../core/types';
 import { withIncludableRelations } from '../relations/response-schema';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
@@ -19,6 +18,7 @@ import {
   type ModelObject,
   pagingQueryShape,
   parseListFilters,
+  sortQueryShape,
 } from './types';
 
 /**
@@ -144,13 +144,7 @@ export abstract class ListEndpoint<
     };
 
     if (this.sortFields.length > 0) {
-      shape.sort = z
-        .enum(this.sortFields as [string, ...string[]])
-        .optional()
-        .meta({ description: 'Field to sort by' });
-      shape.order = z.enum(SORT_DIRECTIONS).optional().meta({
-        description: 'Sort direction (asc or desc)',
-      });
+      Object.assign(shape, sortQueryShape(this.sortFields, this.defaultSort));
     }
 
     if (this.searchFields.length > 0) {
