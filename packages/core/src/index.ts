@@ -165,6 +165,8 @@ export type {
   ErrorResponse,
   HandleArgs,
   InferModel,
+  InferModelRow,
+  RowOf,
   InferMeta,
   InferSchema,
   SchemaKeys,

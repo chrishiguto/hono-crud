@@ -25,6 +25,7 @@ export type {
   MetaInput,
   RelationNamesOf,
 } from './core/types';
+export type { InferModelRow, RowOf } from './core/types';
 export type { ModelObject } from './endpoints/types';
 
 // ============================================================================

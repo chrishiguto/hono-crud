@@ -967,8 +967,12 @@ export interface Model<
   resolveSchema?: (ctx: SchemaResolveContext) => T | Promise<T>;
   /** Primary key field names - must be keys of the schema */
   primaryKeys: Array<SchemaKeys<T> & string>;
-  /** Optional serializer to transform objects before response */
-  serializer?: (obj: z.infer<T>) => unknown;
+  /**
+   * Optional serializer: turns the stored row into the response object.
+   * Receives the row the adapter read, not the public schema — with a Drizzle
+   * table that is `table.$inferSelect`, columns the schema omits included.
+   */
+  serializer?: (row: RowOf<T, TTable>) => unknown;
   /**
    * ORM table reference (Drizzle Table, etc.).
    * For Prisma, a string naming the client delegate explicitly
@@ -1809,6 +1813,23 @@ export interface SearchResult<T> {
  * type User = InferModel<typeof UserModel>;
  */
 export type InferModel<M extends Model> = z.infer<M['schema']>;
+
+/**
+ * The row a model's store hands back, which can be wider than the schema: a
+ * Drizzle table's `$inferSelect` (matched structurally, no drizzle-orm import)
+ * when `table` carries one, the schema's type otherwise (memory, Prisma's
+ * delegate-name string).
+ */
+export type RowOf<T extends ZodObject<ZodRawShape>, TTable> =
+  NonNullable<TTable> extends { $inferSelect: infer R } ? R : z.infer<T>;
+
+/**
+ * Infer the stored row type from a Model — what `serializer` and the
+ * read-side hooks receive. See {@link RowOf}.
+ * @example
+ * type AttachmentRow = InferModelRow<typeof AttachmentModel>;
+ */
+export type InferModelRow<M extends Model> = RowOf<M['schema'], M['table']>;
 
 /**
  * Infer the TypeScript type from a MetaInput's model schema.
