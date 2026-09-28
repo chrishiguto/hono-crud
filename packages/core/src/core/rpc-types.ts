@@ -296,6 +296,11 @@ export interface CrudListQuery {
   fields?: string;
   cursor?: string;
   limit?: number | string;
+  /**
+   * Filters. Numbers are accepted because an index signature must admit
+   * every declared member (`page` and friends); hc stringifies them, and the
+   * endpoint coerces filter values to the model's field types.
+   */
   [filter: string]: number | string | undefined;
 }
 
@@ -311,6 +316,7 @@ export interface CrudSearchQuery {
   page?: number | string;
   per_page?: number | string;
   fields?: string;
+  /** Filters; numbers are accepted for the same reason as on `CrudListQuery`. */
   [filter: string]: number | string | undefined;
 }
 
