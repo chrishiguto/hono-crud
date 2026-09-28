@@ -13,7 +13,7 @@ import type {
   SearchResultItem,
   SortSpec,
 } from '../core/types';
-import { SEARCH_MODES, SORT_DIRECTIONS } from '../core/types';
+import { SEARCH_MODES } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import {
@@ -29,6 +29,7 @@ import {
   type ListFilters,
   pagingQueryShape,
   parseListFilters,
+  sortQueryShape,
 } from './types';
 
 /**
@@ -258,13 +259,7 @@ export abstract class SearchEndpoint<
 
     // Sorting
     if (this.sortFields.length > 0) {
-      shape.sort = z
-        .enum(this.sortFields as [string, ...string[]])
-        .optional()
-        .meta({ description: 'Field to sort by' });
-      shape.order = z.enum(SORT_DIRECTIONS).optional().meta({
-        description: 'Sort direction (asc or desc)',
-      });
+      Object.assign(shape, sortQueryShape(this.sortFields, this.defaultSort));
     }
 
     // Filter fields

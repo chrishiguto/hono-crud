@@ -16,7 +16,7 @@ import type {
   defineMeta,
   defineModel,
 } from '../core/types';
-import { isFilterOperator } from '../core/types';
+import { SORT_DIRECTIONS, isFilterOperator } from '../core/types';
 
 // Re-export core types
 export type {
@@ -222,6 +222,29 @@ export function pagingQueryShape(defaultPerPage: number, maxPerPage: number) {
   return {
     page: z.coerce.number().int().min(1).default(1),
     per_page: z.coerce.number().int().min(1).max(maxPerPage).default(defaultPerPage),
+  };
+}
+
+/**
+ * The `sort` / `order` query params of an endpoint with `sortFields`. Each
+ * carries the default `parseListFilters` applies when it is absent, so the
+ * OpenAPI document states what an unsorted request is ordered by: `order`
+ * defaults to `defaultSort.order` (else `asc`), and `sort` to
+ * `defaultSort.field` when that field is one of `sortFields` (a default
+ * outside the enum cannot be stated, and the runtime default still applies).
+ */
+export function sortQueryShape(sortFields: string[], defaultSort?: SortSpec) {
+  const sort = z.enum(sortFields as [string, ...string[]]);
+  const sortDefault =
+    defaultSort && sortFields.includes(defaultSort.field) ? defaultSort.field : undefined;
+  return {
+    sort: (sortDefault === undefined ? sort.optional() : sort.default(sortDefault)).meta({
+      description: 'Field to sort by',
+    }),
+    order: z
+      .enum(SORT_DIRECTIONS)
+      .default(defaultSort?.order ?? 'asc')
+      .meta({ description: 'Sort direction (asc or desc)' }),
   };
 }
 
