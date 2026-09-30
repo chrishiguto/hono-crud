@@ -1,8 +1,10 @@
 // Unit tests for `withIncludableRelations` (packages/core/src/relations/
-// response-schema.ts) — the helper that adds includable relations to a List/Read
-// OpenAPI response item schema so `?include=` shapes are documented + typed.
+// response-schema.ts) — the helper that adds includable relations to a
+// List/Read/Search/Export OpenAPI response item schema so `?include=` shapes
+// are documented + typed.
 import {
   MemoryCreateEndpoint,
+  MemoryExportEndpoint,
   MemoryListEndpoint,
   MemoryReadEndpoint,
   MemorySearchEndpoint,
@@ -138,6 +140,10 @@ describe('withIncludableRelations OpenAPI emission', () => {
     _meta = commentMeta;
     allowedIncludes = ['post'];
   }
+  class CommentExport extends MemoryExportEndpoint {
+    _meta = commentMeta;
+    allowedIncludes = ['post'];
+  }
   class PostRead extends MemoryReadEndpoint {
     _meta = postMeta;
   }
@@ -147,10 +153,14 @@ describe('withIncludableRelations OpenAPI emission', () => {
     // Relation routes first: the related schema's first use is the to-one include.
     app.get('/comments', CommentList);
     app.get('/comments/search', CommentSearch);
+    app.get('/comments/export', CommentExport);
     app.get('/comments/:id', CommentRead);
     app.post('/comments', CommentCreate);
     app.get('/posts/:id', PostRead);
-    app.doc('/openapi.json', { openapi, info: { title: 't', version: '1' } });
+    const config = { openapi, info: { title: 't', version: '1' } };
+    // `.doc()` runs the 3.0 generator whatever `openapi` says; `.doc31()` is the 3.1 one.
+    if (openapi === '3.0.0') app.doc('/openapi.json', config);
+    else app.doc31('/openapi.json', config);
     return (await app.request('/openapi.json')).json() as Promise<Doc>;
   }
 
@@ -169,7 +179,7 @@ describe('withIncludableRelations OpenAPI emission', () => {
     ]);
 
   for (const openapi of ['3.0.0', '3.1.0'] as const) {
-    it(`keeps the item $ref on list, read and search (${openapi})`, async () => {
+    it(`keeps the item $ref on list, read, search and export (${openapi})`, async () => {
       const doc = await emit(openapi);
       expect(result(doc, '/comments', 'post')).toEqual({
         $ref: '#/components/schemas/IncludeComment',
@@ -179,6 +189,10 @@ describe('withIncludableRelations OpenAPI emission', () => {
       const searchItem = (result(doc, '/comments/search', 'get').items as Schema)
         .properties as Record<string, Schema>;
       extendsComment(searchItem.item as Schema);
+      const exportData = (
+        result(doc, '/comments/export', 'get').properties as Record<string, Schema>
+      ).data as Schema;
+      extendsComment(exportData.items as Schema);
     });
 
     it(`keeps a to-one relation nullable without touching its component (${openapi})`, async () => {
@@ -190,10 +204,13 @@ describe('withIncludableRelations OpenAPI emission', () => {
         $ref: '#/components/schemas/IncludePost',
       });
       const relations = (result(doc, '/comments/{id}', 'get').allOf as Schema[])[1] as {
-        properties: { post: { anyOf: Schema[] } };
+        properties: { post: Schema };
       };
-      expect(relations.properties.post.anyOf[0]).toEqual({
-        $ref: '#/components/schemas/IncludePost',
+      expect(relations.properties.post).toEqual({
+        anyOf: [
+          { $ref: '#/components/schemas/IncludePost' },
+          openapi === '3.0.0' ? { nullable: true } : { type: 'null' },
+        ],
       });
     });
   }
