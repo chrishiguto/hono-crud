@@ -335,7 +335,7 @@ export function computeAggregations<T extends Record<string, unknown>>(
   records: T[],
   options: AggregateOptions,
 ): AggregateResult {
-  const { aggregations, groupBy, having, orderBy, orderDirection, limit, offset } = options;
+  const { aggregations, groupBy, having } = options;
 
   // If no groupBy, compute single set of aggregations
   if (!groupBy || groupBy.length === 0) {
@@ -398,7 +398,7 @@ export function computeAggregations<T extends Record<string, unknown>>(
     });
   }
 
-  return orderAndPageGroups(groupResults, { orderBy, orderDirection, limit, offset });
+  return orderAndPageGroups(groupResults, options);
 }
 
 // ============================================================================
