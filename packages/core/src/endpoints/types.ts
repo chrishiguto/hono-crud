@@ -122,7 +122,8 @@ const ZOD_WRAPPER_TYPES = new Set([
  * with the `_def.type` alias as a fallback) so no zod internals are imported.
  * Wrappers are unwrapped; a `pipe` (`z.preprocess`, `.transform`) is read
  * through its output side. Enums and literals resolve to `enum` only when
- * every value is a string; numeric ones stay `other` (raw pass-through).
+ * every value is a string; a non-string member (number, boolean, null)
+ * leaves them `other` (raw pass-through).
  */
 function resolveFilterValueKind(schema: unknown, depth = 0): FilterValueKind {
   if (!schema || typeof schema !== 'object' || depth > 8) return OTHER_KIND;
@@ -148,10 +149,10 @@ function resolveFilterValueKind(schema: unknown, depth = 0): FilterValueKind {
   return OTHER_KIND;
 }
 
-/** `enum` when every member is a string; numeric members pass through as `other`. */
+/** `enum` when every member is a string; any non-string member makes it `other`. */
 function enumKind(values: unknown[]): FilterValueKind {
-  return values.length > 0 && values.every((v) => typeof v === 'string')
-    ? { kind: 'enum', values: values as string[] }
+  return values.length > 0 && values.every((v): v is string => typeof v === 'string')
+    ? { kind: 'enum', values }
     : OTHER_KIND;
 }
 
