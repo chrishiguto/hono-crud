@@ -19,10 +19,14 @@
  *   singular for item verbs, other segments are kept verbatim;
  * - a base path with no static segment falls back to the model `tableName`.
  *
- * Because the phrase comes from the path, ids are unique by construction
- * within one app (two resources cannot share a base path). They are NOT
- * unique across apps mounted under different prefixes (`app.route('/v1', a)`
+ * Because the phrase comes from the path, distinct base paths almost always
+ * get distinct ids; the rare collision (`/comments` and `/comment` both give
+ * `getComment`) fails at setup instead of emitting a duplicate. Ids are NOT
+ * checked across apps mounted under different prefixes (`app.route('/v1', a)`
  * and `app.route('/v2', b)`): the mount prefix is invisible at registration.
+ * A prefix in the registered path itself, by contrast, is part of the id
+ * (`/api/comments` → `listApiComments`); register on a sub-app mounted at
+ * the prefix to keep it out.
  */
 
 import { CRUD_ROUTES, type CrudEndpointName } from './crud-routes';
@@ -53,7 +57,7 @@ export interface OperationIdContext {
  * @example
  * ```ts
  * // Prefix ids for an app mounted at /v2 so they don't clash with /v1.
- * fromHono(new OpenAPIHono(), { operationIds: ({ defaultId }) => defaultId && `v2${defaultId}` });
+ * fromHono(new OpenAPIHono(), { operationIds: ({ defaultId }) => defaultId && `v2_${defaultId}` });
  * ```
  */
 export type OperationIdsOption = false | ((ctx: OperationIdContext) => string | undefined);
