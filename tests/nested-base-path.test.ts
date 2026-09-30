@@ -108,6 +108,13 @@ describe('base-path params are declared', () => {
     });
   });
 
+  it('leaves an optional base-path param undeclared so requests that omit it pass', async () => {
+    const app = fromHono(new OpenAPIHono());
+    registerCrud(app, '/comments/:scope?', { list: commentEndpoints().list });
+    expect((await app.request('/comments')).status).toBe(200);
+    expect((await app.request('/comments/mine')).status).toBe(200);
+  });
+
   it('reads the child id on a nested item route', async () => {
     const app = fromHono(new OpenAPIHono());
     registerCrud(app, '/notes/:noteId/comments', commentEndpoints());
