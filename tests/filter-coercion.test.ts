@@ -102,15 +102,18 @@ describe('filter coercion (memory adapter)', () => {
   });
 
   it('rejects a value outside the enum with 400 VALIDATION_ERROR instead of an empty page', async () => {
+    // eq/ne are enum-typed query params, so the OpenAPI validator rejects them
+    // first; comma-list operators stay strings and the parser checks each item.
     for (const query of ['status=publised', 'status[ne]=publised', 'status[in]=draft,publised']) {
       const res = await app.request(`/items?${query}`);
       expect(res.status, query).toBe(400);
       const body = (await res.json()) as ErrorBody;
       expect(body.error.code).toBe('VALIDATION_ERROR');
-      expect(body.error.message).toBe(
-        "Filter 'status' expects one of draft, published, got 'publised'",
-      );
     }
+    const res = await app.request('/items?status[in]=draft,publised');
+    expect(((await res.json()) as ErrorBody).error.message).toBe(
+      "Filter 'status' expects one of draft, published, got 'publised'",
+    );
   });
 });
 

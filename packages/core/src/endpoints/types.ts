@@ -157,6 +157,16 @@ function enumKind(values: unknown[]): FilterValueKind {
 }
 
 /**
+ * The members of a string `z.enum` / `z.literal` field, else `undefined`.
+ * Shares the resolver the filter coercion uses, so a documented enum param
+ * and the runtime membership check can never disagree.
+ */
+export function filterEnumValues(fieldSchema: unknown): readonly string[] | undefined {
+  const kind = resolveFilterValueKind(fieldSchema);
+  return kind.kind === 'enum' ? kind.values : undefined;
+}
+
+/**
  * Coerce ONE raw query-string value to the field's declared kind. Garbage
  * (a non-numeric string for a number field, an unrecognised boolean token,
  * an unparseable date, a value outside an enum) is a client error — 400,
