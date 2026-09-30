@@ -18,6 +18,10 @@
  *   `400 AGGREGATION_ERROR`;
  * - `?withDeleted=true` counts soft-deleted rows, `=false` (or absent) does
  *   not, and neither is ever treated as a filter.
+ * - filters: with no `filterFields`, every model field filters by equality,
+ *   with values checked against the field type (400 on an enum typo or a
+ *   non-numeric number); any other query key is ignored, never sent to the
+ *   adapter as a column.
  */
 import { expect, test } from 'vitest';
 import type { AdapterDescriptor, ConformanceRecord, CtxGetter } from '../contract';
@@ -133,5 +137,34 @@ export function registerAggregateQueryCells(_descriptor: AdapterDescriptor, ctx:
     expect(await count('')).toBe(4);
     expect(await count('&withDeleted=false')).toBe(4);
     expect(await count('&withDeleted=true')).toBe(5);
+  });
+
+  test('aggregate: filters are limited to model fields and checked against the field type', async () => {
+    const { app } = ctx();
+    await seedFilterRows(app, '/items');
+
+    const count = async (query: string) =>
+      (
+        await expectSuccess<AggregateBody>(
+          await app.request(`/items/aggregate?count=*${query}`),
+          200,
+        )
+      ).values?.count;
+
+    expect(await count('&role=guest')).toBe(2);
+    expect(await count('&age=35')).toBe(1);
+    // Not model fields: ignored instead of reaching the adapter as a column.
+    expect(await count('&page=1&notAField=x')).toBe(5);
+
+    await expectError(
+      await app.request('/items/aggregate?count=*&role=gust'),
+      400,
+      'VALIDATION_ERROR',
+    );
+    await expectError(
+      await app.request('/items/aggregate?count=*&age=abc'),
+      400,
+      'VALIDATION_ERROR',
+    );
   });
 }

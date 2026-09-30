@@ -575,6 +575,23 @@ describe('Aggregations', () => {
       ).toBe(8);
     });
 
+    it('only filters by filterFields when they are set', async () => {
+      class CategoryOnlyAggregate extends MemoryAggregateEndpoint {
+        _meta = { model: ProductModel };
+        filterFields = ['category'];
+      }
+      const scoped = fromHono(new OpenAPIHono());
+      scoped.onError(createErrorHandler());
+      registerCrud(scoped, '/products', { aggregate: CategoryOnlyAggregate });
+
+      const response = await scoped.request(
+        '/products/aggregate?count=*&category=furniture&isActive=false',
+      );
+      const body = (await response.json()) as { result: { values: { count: number } } };
+      // isActive is not filterable here, so only category applies: 3 furniture rows.
+      expect(body.result.values.count).toBe(3);
+    });
+
     it('ignores ?withDeleted when the model disallows querying deleted rows', async () => {
       const { status, body } = await aggregate(
         '/locked-products/aggregate?count=*&withDeleted=true',

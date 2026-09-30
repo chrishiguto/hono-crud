@@ -564,6 +564,13 @@ above `maxLimit` (default 1000) is `400 AGGREGATION_ERROR`. On a soft-delete
 model, `?withDeleted=true` (the model's `softDelete.queryParam`) includes
 deleted rows, unless the model sets `allowQueryDeleted: false`.
 
+Other query params filter by equality (`?role=admin`). By default every model
+field is filterable; set `filterFields` (or `aggregate: { fields }` with
+`defineEndpoints`) to narrow it. Values are converted and checked against the
+field type like list filters, so `?role=admn` on an enum field is
+`400 VALIDATION_ERROR`, and query keys that aren't filterable fields are
+ignored.
+
 ---
 
 ## Export / Import
