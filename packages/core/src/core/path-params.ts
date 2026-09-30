@@ -47,6 +47,10 @@ function isParamsObject(schema: unknown): schema is ParamsObject {
  * list (`GET /notes/{noteId}/comments`) documents none. Params the endpoint
  * (or a user `request.params` override) already declares keep their schema;
  * a params schema that isn't an object is left alone.
+ *
+ * Optional Hono params (`:scope?`) are skipped: the declared schema also
+ * validates requests, so a required string would 400 every request that
+ * omits the segment, and OpenAPI path params can't be optional anyway.
  */
 export function declareBasePathParams(
   schema: OpenAPIRouteSchema,
@@ -55,7 +59,8 @@ export function declareBasePathParams(
   const params = schema.request?.params;
   if (params !== undefined && !isParamsObject(params)) return schema;
   const declared = params?.shape ?? {};
-  const missing = pathParamNames(basePath).filter((name) => !(name in declared));
+  const requiredSegments = basePath.split('/').filter((segment) => !segment.endsWith('?'));
+  const missing = pathParamNames(requiredSegments.join('/')).filter((name) => !(name in declared));
   if (missing.length === 0) return schema;
   const shape = Object.fromEntries(missing.map((name) => [name, z.string()]));
   const merged = params ? params.extend(shape) : z.object(shape);
