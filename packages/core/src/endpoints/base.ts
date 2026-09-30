@@ -803,7 +803,7 @@ export abstract class CrudEndpoint<
     const param = (field: string, operator: FilterOperator): z.ZodTypeAny => {
       const members =
         operator === 'eq' || operator === 'ne' ? filterEnumValues(modelShape[field]) : undefined;
-      return members ? z.enum(members as [string, ...string[]]).optional() : z.string().optional();
+      return members ? z.enum(members).optional() : z.string().optional();
     };
 
     for (const field of filterFields) {
