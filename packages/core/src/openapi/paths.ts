@@ -66,7 +66,8 @@ export interface ToOpenApiPathsOptions {
    * Default `operationId` generation — the same ids `registerCrud` emits for
    * a resource registered at `basePath` (`listUsers`, `getUser`, ...). With
    * no `basePath`, the resource name comes from the model's `tableName`.
-   * `false` emits no default. An explicit `openapi.operationId` always wins.
+   * `false` emits no default; a function replaces the built-in naming. An
+   * explicit `openapi.operationId` always wins.
    */
   operationIds?: OperationIdsOption;
 }

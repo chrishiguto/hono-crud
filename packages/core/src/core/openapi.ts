@@ -30,9 +30,9 @@ export interface RouterOptions {
   /**
    * Default `operationId` generation for `registerCrud` routes
    * (`listComments`, `getComment`, `listNoteComments`, ...). On by default;
-   * `false` emits no default, so only explicit `schema.operationId`s appear.
-   * An explicit `schema.operationId` always wins. See `core/operation-id.ts`
-   * for the naming rules.
+   * `false` emits no default, so only explicit `schema.operationId`s appear;
+   * a function replaces the built-in naming. An explicit `schema.operationId`
+   * always wins. See `core/operation-id.ts` for the naming rules.
    */
   operationIds?: OperationIdsOption;
 }

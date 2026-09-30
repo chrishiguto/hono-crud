@@ -25,14 +25,38 @@
  * and `app.route('/v2', b)`): the mount prefix is invisible at registration.
  */
 
-import type { CrudEndpointName } from './crud-routes';
+import { CRUD_ROUTES, type CrudEndpointName } from './crud-routes';
 import type { OpenAPIRouteSchema } from './types';
+
+/** What a custom {@link OperationIdsOption} naming function receives. */
+export interface OperationIdContext {
+  /** The `registerCrud` slot (`list`, `read`, `batchCreate`, ...). */
+  operation: CrudEndpointName;
+  /** HTTP verb of the route, lowercase. */
+  method: (typeof CRUD_ROUTES)[number][1];
+  /** Base path as registered, joined with the slot's sub-path (`/comments/:id`). */
+  path: string;
+  /** Base path as registered (`/notes/:noteId/comments`). */
+  basePath: string;
+  /** The endpoint's model, when it has one. */
+  model?: { tableName: string; tag?: string };
+  /** The built-in default, so a strategy can adjust it rather than rebuild it. */
+  defaultId: string | undefined;
+}
 
 /**
  * Controls default `operationId` generation. `false` turns it off, so routes
- * without an explicit `schema.operationId` emit none (the pre-default doc).
+ * without an explicit `schema.operationId` emit none (the pre-default doc). A
+ * function replaces the built-in naming: its return value becomes the id, and
+ * `undefined` omits it. An explicit `schema.operationId` always wins.
+ *
+ * @example
+ * ```ts
+ * // Prefix ids for an app mounted at /v2 so they don't clash with /v1.
+ * fromHono(new OpenAPIHono(), { operationIds: ({ defaultId }) => defaultId && `v2${defaultId}` });
+ * ```
  */
-export type OperationIdsOption = false;
+export type OperationIdsOption = false | ((ctx: OperationIdContext) => string | undefined);
 
 /** The `registerCrud` slot a route was registered for, and its base path. */
 export interface CrudRouteHint {
@@ -139,18 +163,28 @@ export function defaultOperationId(
   return resource ? `${verb}${resource}${suffix}` : undefined;
 }
 
+const ROUTES = new Map(CRUD_ROUTES.map(([name, method, subPath]) => [name, { method, subPath }]));
+
 /**
- * Apply the default `operationId` to an endpoint's resolved schema. An
- * explicit `schema.operationId` always wins; `operationIds: false` leaves the
- * schema untouched.
+ * Apply the default (or strategy-named) `operationId` to an endpoint's
+ * resolved schema. An explicit `schema.operationId` always wins;
+ * `operationIds: false` leaves the schema untouched.
  */
 export function applyDefaultOperationId(
   schema: OpenAPIRouteSchema,
   hint: CrudRouteHint,
-  model: { tableName: string } | undefined,
+  model: { tableName: string; tag?: string } | undefined,
   option: OperationIdsOption | undefined,
 ): OpenAPIRouteSchema {
   if (schema.operationId !== undefined || option === false) return schema;
-  const operationId = defaultOperationId(hint.operation, hint.basePath, model?.tableName);
+  const { operation, basePath } = hint;
+  const defaultId = defaultOperationId(operation, basePath, model?.tableName);
+  let operationId = defaultId;
+  if (option) {
+    const route = ROUTES.get(operation);
+    if (!route) return schema;
+    const path = `${basePath}${route.subPath}`;
+    operationId = option({ operation, method: route.method, path, basePath, model, defaultId });
+  }
   return operationId === undefined ? schema : { ...schema, operationId };
 }
