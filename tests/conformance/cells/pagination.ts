@@ -12,7 +12,7 @@
  */
 import { expect, test } from 'vitest';
 import type { AdapterDescriptor, CtxGetter, ResultInfo } from '../contract';
-import { expectError, expectList } from '../contract';
+import { expectError, expectList, readJson } from '../contract';
 import { SEED_EMAILS_SORTED, seedFilterRows } from '../model';
 
 export function registerPaginationCells(_descriptor: AdapterDescriptor, ctx: CtxGetter): void {
@@ -110,8 +110,11 @@ export function registerPaginationCells(_descriptor: AdapterDescriptor, ctx: Ctx
     const { app } = ctx();
     await seedFilterRows(app, '/items');
 
-    const response = await app.request('/items/export?per_page=500&page=0');
+    // per_page=1 would cut the export to one row if honored; page=0 would 400 if validated.
+    const response = await app.request('/items/export?per_page=1&page=0');
     expect(response.status).toBe(200);
+    const body = await readJson<{ result: { count: number } }>(response);
+    expect(body.result.count).toBe(5);
   });
 
   test('offset pagination: search refuses page/per_page outside the documented bounds', async () => {

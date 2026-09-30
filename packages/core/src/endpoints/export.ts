@@ -113,6 +113,17 @@ export abstract class ExportEndpoint<
   }
 
   /**
+   * Drops `page` / `per_page` before the list parser validates them. The
+   * registered route's schema already strips them, but an export mounted
+   * without the route validator hands over the raw query, and a param the
+   * endpoint ignores must not be able to refuse it.
+   */
+  protected override async getFilterQuery(): Promise<Record<string, unknown>> {
+    const { page: _page, per_page: _perPage, ...query } = await super.getFilterQuery();
+    return query;
+  }
+
+  /**
    * Generates OpenAPI schema for the export endpoint.
    */
   getSchema(): OpenAPIRouteSchema {

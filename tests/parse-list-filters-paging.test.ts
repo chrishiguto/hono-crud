@@ -1,4 +1,9 @@
-import { MemoryListEndpoint, MemoryVersionHistoryEndpoint } from '@hono-crud/memory';
+import {
+  MemoryExportEndpoint,
+  MemoryListEndpoint,
+  MemoryVersionHistoryEndpoint,
+  getStore,
+} from '@hono-crud/memory';
 import { Hono } from 'hono';
 import { InputValidationException, parseListFilters } from 'hono-crud';
 import type { MetaInput, Model } from 'hono-crud';
@@ -110,6 +115,33 @@ describe('list endpoint mounted without the route validator', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { result_info: { page: number; per_page: number } };
     expect(body.result_info).toMatchObject({ page: 2, per_page: 5 });
+  });
+});
+
+class BareItemExport extends MemoryExportEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+}
+
+describe('export endpoint mounted without the route validator', () => {
+  const app = new Hono();
+  app.get('/items/export', async (c) => {
+    const endpoint = new BareItemExport();
+    endpoint.setContext(c as never);
+    return endpoint.handle();
+  });
+
+  it('neither honors nor validates page/per_page, like a registered export', async () => {
+    const store = getStore<Record<string, unknown>>('bare_paging_items');
+    store.clear();
+    for (const name of ['a', 'b', 'c']) {
+      const id = crypto.randomUUID();
+      store.set(id, { id, name });
+    }
+
+    const response = await app.request('/items/export?per_page=1&page=0');
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { result: { count: number } };
+    expect(body.result.count).toBe(3);
   });
 });
 

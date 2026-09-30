@@ -248,10 +248,19 @@ export abstract class ListEndpoint<
   }
 
   /**
+   * The query `getFilters` parses. Export narrows it to drop the paging
+   * params it ignores.
+   */
+  protected async getFilterQuery(): Promise<Record<string, unknown>> {
+    const { query } = await this.getValidatedData();
+    return query ?? {};
+  }
+
+  /**
    * Parses query parameters into list filters.
    */
   protected async getFilters(): Promise<ListFilters> {
-    const { query } = await this.getValidatedData();
+    const query = await this.getFilterQuery();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
     const config: ListFilterParseOptions = {
@@ -277,7 +286,7 @@ export abstract class ListEndpoint<
       fieldSchemas: this.getModelSchema().shape,
     };
 
-    return parseListFilters(query || {}, config);
+    return parseListFilters(query, config);
   }
 
   /**
