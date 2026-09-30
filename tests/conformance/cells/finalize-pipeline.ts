@@ -239,8 +239,8 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
   test('finalize pipeline: the ETag a read returns satisfies If-Match on update', async () => {
     const { app } = ctx();
     // The response differs from the stored row (computed field added, profiled
-    // field and server-only column dropped), so the If-Match check has to hash
-    // the finalized representation the client saw, not the row.
+    // field, server-only column and policy-masked `role` dropped), so the
+    // If-Match check has to hash the representation the client saw, not the row.
     const created = await createRecord(app, '/finalize-items', {
       name: 'Tagged',
       email: 'projection-etag@conformance.test',
@@ -249,6 +249,8 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
     });
     const read = await app.request(`/finalize-items/${created.id}`);
     expect(read.status).toBe(200);
+    const readBody = await readJson<{ result: ConformanceRecord }>(read.clone());
+    expect('role' in readBody.result).toBe(false);
     const etag = read.headers.get('ETag');
     expect(etag).toBeTruthy();
 

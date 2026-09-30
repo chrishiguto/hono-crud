@@ -115,6 +115,9 @@ const finalizeModel = defineModel({
   primaryKeys: ['id'],
   softDelete: { field: 'deletedAt' },
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  // A read-policy field mask: read's ETag hashes the masked record, so
+  // update's If-Match check has to mask it too (the finalize ETag test).
+  policies: { fields: () => ({ role: undefined }) },
   computedFields: {
     nameUpper: {
       schema: z.string(),

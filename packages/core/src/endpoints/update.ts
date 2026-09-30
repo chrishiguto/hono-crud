@@ -408,15 +408,18 @@ export abstract class UpdateEndpoint<
 
     // ETag: Check If-Match for optimistic concurrency control. The client's
     // ETag came from a read response, so hash the same representation —
-    // decrypted and finalized — not the stored row, which can carry columns,
-    // ciphertext or pre-serializer values the response never showed.
+    // decrypted, policy-masked and finalized — not the stored row, which can
+    // carry columns, ciphertext or pre-serializer values the response never
+    // showed. A row the read policy hides has no read ETag to match, so it is
+    // hashed unmasked.
     if (this.etagEnabled && previousRecord) {
       const ifMatch = this.getContext().req.header('If-Match');
       if (ifMatch) {
         const decrypted = (await this.decryptOnRead(
           previousRecord as Record<string, unknown>,
         )) as InferModelRow<M['model']>;
-        const currentEtag = await generateETag(await this.finalizeRecord(decrypted));
+        const visible = (await this.applyReadPolicy(decrypted)) ?? decrypted;
+        const currentEtag = await generateETag(await this.finalizeRecord(visible));
         if (!matchesIfMatch(ifMatch, currentEtag)) {
           return this.error('Resource has been modified by another request', 'CONFLICT', 409);
         }

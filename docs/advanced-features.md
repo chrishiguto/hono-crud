@@ -662,8 +662,10 @@ back to the schema type.
 - Events and `after` hooks still carry the row, so a subscriber can read a
   server-only column. The SSE subscribe handler strips only its `excludeFields`
   and does not project.
-- `If-Match` on update is checked against the same finalized representation a
-  read's `ETag` is computed from.
+- `If-Match` on update is checked against the representation a plain read's
+  `ETag` is computed from: the row masked by `policies.fields`, then finalized.
+  An ETag from a read with `?fields=` or `?include=`, or from a Read endpoint
+  whose own `after` or `transform` reshapes the record, won't match.
 
 ```typescript
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';

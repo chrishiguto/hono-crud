@@ -196,6 +196,9 @@ const finalizeModel = defineModel({
   softDelete: { field: 'deletedAt' },
   timestamps: true,
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  // A read-policy field mask: read's ETag hashes the masked record, so
+  // update's If-Match check has to mask it too (the finalize ETag test).
+  policies: { fields: () => ({ role: undefined }) },
   versioning: { field: 'version' },
   relations: {
     parent: {
