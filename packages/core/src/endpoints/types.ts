@@ -236,7 +236,7 @@ function coerceScalarFilterValue(field: string, raw: string, kind: FilterValueKi
  * the null operator coerces to boolean; substring operators (like, ilike)
  * always keep the raw string.
  */
-function coerceFilterValue(
+export function coerceFilterValue(
   operator: FilterOperator,
   raw: string,
   field = '',

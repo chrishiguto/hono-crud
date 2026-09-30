@@ -14,6 +14,7 @@ import type {
 import { SORT_DIRECTIONS } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
+import { coerceFilterValue } from './types';
 
 /**
  * Default aggregate configuration.
@@ -87,10 +88,19 @@ export abstract class AggregateEndpoint<
   protected maxGroupByFields = 5;
 
   /**
-   * Fields that can be used for filtering.
-   * Empty array means all fields are allowed.
+   * Fields clients may filter by (`?field=value`, equality only). Empty means
+   * every model field. Other query keys are ignored, and values are converted
+   * and checked against the field type exactly like list filters (a value
+   * outside an enum is 400).
    */
   protected filterFields: string[] = [];
+
+  /** `filterFields`, or every model field when it is empty. */
+  protected getFilterableFields(): string[] {
+    return this.filterFields.length > 0
+      ? this.filterFields
+      : Object.keys(this.getModelSchema().shape);
+  }
 
   /**
    * Get the soft delete configuration for this model.
@@ -139,6 +149,11 @@ export abstract class AggregateEndpoint<
       shape[softDeleteConfig.queryParam] = z.enum(['true', 'false']).optional();
     }
 
+    // Reserved params win over a model field of the same name (the parser
+    // consumes them before filters are collected).
+    const filterFields = this.getFilterableFields().filter((field) => !(field in shape));
+    this.addFilterParams(shape, filterFields);
+
     return z.object(shape).passthrough() as unknown as ZodObject<ZodRawShape>;
   }
 
@@ -185,10 +200,31 @@ export abstract class AggregateEndpoint<
   protected async getAggregateOptions(): Promise<AggregateOptions> {
     const { query } = await this.getValidatedData();
     const softDeleteConfig = this.getSoftDeleteConfig();
-    return parseAggregateQuery(query || {}, {
+    const options = parseAggregateQuery(query || {}, {
       softDeleteQueryParam: softDeleteConfig.queryParam,
       allowQueryDeleted: softDeleteConfig.enabled && softDeleteConfig.allowQueryDeleted,
     });
+    options.filters = this.toAllowedFilters(options.filters);
+    return options;
+  }
+
+  /**
+   * Keep only filterable fields and convert each value by the field's type.
+   * Every unreserved query key used to become a filter, so `?page=1` or a
+   * typo reached the adapter as a column name (drizzle threw on it).
+   */
+  private toAllowedFilters(
+    filters: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!filters) return undefined;
+    const allowed = this.getFilterableFields();
+    const modelShape: Record<string, unknown> = this.getModelSchema().shape;
+    const kept: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(filters)) {
+      if (!allowed.includes(field)) continue;
+      kept[field] = coerceFilterValue('eq', String(value), field, modelShape[field]);
+    }
+    return Object.keys(kept).length > 0 ? kept : undefined;
   }
 
   /**

@@ -537,6 +537,75 @@ exports[`OpenAPI output snapshot > toOpenApiPaths output is stable (byte-for-byt
             "type": "string",
           },
         },
+        {
+          "in": "query",
+          "name": "id",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "title",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "slug",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "body",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "status",
+          "required": false,
+          "schema": {
+            "enum": [
+              "draft",
+              "published",
+              "archived",
+            ],
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "views",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "authorEmail",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
+        {
+          "in": "query",
+          "name": "published",
+          "required": false,
+          "schema": {
+            "type": "string",
+          },
+        },
       ],
       "responses": {
         "200": {
