@@ -23,9 +23,10 @@ This pattern avoids coupling to specific Drizzle versions while maintaining inte
 
 ### Row vs public shape
 `ModelObject`/`InferModel` is the model's public shape (the Zod schema): request bodies,
-`before` hooks, `transform`. `InferModelRow` is what the store hands back, which can be wider
-(server-only columns, JSON text columns): adapter read/write returns, `after` hooks,
-`serializer`, `computedFields`, `policies`. Type each value by where it came from.
+write `before` hooks, `transform`. `InferModelRow` is what the store hands back, which can
+be wider (server-only columns, JSON text columns): adapter read/write returns, `after`
+hooks, clone's `before` (it receives the copied row), `serializer`, `computedFields`,
+`policies`. Type each value by where it came from.
 
 ## Adapter Behavior Rules
 
