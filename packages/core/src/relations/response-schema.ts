@@ -15,11 +15,12 @@ import type { MetaInput, RelationConfig } from '../core/types';
  *   - `belongsTo` / `hasOne` → `z.union([relationSchema, z.null()]).optional()`
  *
  * Two emission constraints shape this (zod-to-openapi 8.x):
- *   - A named item schema (`.meta({ id })`) keeps its component `$ref`: it is
- *     re-named via `.openapi(id)` before `.extend()`, the one path zod-to-openapi
- *     emits as `allOf: [{ $ref }, { relations }]`. A plain `.extend()` drops the
- *     id and inlines the row. Not `z.intersection`: Zod's JSON Schema output
- *     (MCP `outputSchema`) closes both allOf branches, rejecting every row.
+ *   - A named item schema (`.meta({ id })`) keeps its component `$ref` where it
+ *     can (see {@link extendableBase}): it is re-named via `.openapi(id)` before
+ *     `.extend()`, the one path zod-to-openapi emits as
+ *     `allOf: [{ $ref }, { relations }]`. A plain `.extend()` drops the id and
+ *     inlines the row. Not `z.intersection`: Zod's JSON Schema output (MCP
+ *     `outputSchema`) closes both allOf branches, rejecting every row.
  *   - A to-one relation is a union with null, not `.nullable()`: nullable over a
  *     named schema can mark the shared component itself nullable when it is the
  *     schema's first use (asteasolutions/zod-to-openapi#258).
@@ -48,7 +49,25 @@ export function withIncludableRelations(
   }
   if (Object.keys(extension).length === 0) return itemSchema;
 
+  return extendableBase(itemSchema).extend(extension);
+}
+
+/**
+ * The item schema to extend: re-named via `.openapi(id)` when its `allOf`
+ * emission is sound, otherwise itself (the row inlines, as before #150):
+ *   - the row must be named (`.meta({ id })`), or there is no component to reference;
+ *   - the row must be open (no catchall): a `z.strictObject` component's
+ *     `additionalProperties: false` rejects the relation fields (and the strict
+ *     relation branch rejects the row's own), and a `.catchall(T)` one
+ *     requires every relation to match `T` — every such row would fail the doc;
+ *   - `.openapi` must exist: `@hono/zod-openapi` adds it only to the Zod instance
+ *     it imports, so a row built on a second Zod copy has none to call.
+ */
+function extendableBase(itemSchema: ZodObject<ZodRawShape>): ZodObject<ZodRawShape> {
   const id = itemSchema.meta()?.id;
-  const base = typeof id === 'string' ? itemSchema.openapi(id) : itemSchema;
-  return base.extend(extension);
+  const composable =
+    typeof id === 'string' &&
+    itemSchema.def.catchall === undefined &&
+    typeof itemSchema.openapi === 'function';
+  return composable ? itemSchema.openapi(id) : itemSchema;
 }

@@ -2,6 +2,7 @@
 // response-schema.ts) — the helper that adds includable relations to a
 // List/Read/Search/Export OpenAPI response item schema so `?include=` shapes
 // are documented + typed.
+import { createRequire } from 'node:module';
 import {
   MemoryCreateEndpoint,
   MemoryExportEndpoint,
@@ -224,5 +225,42 @@ describe('withIncludableRelations OpenAPI emission', () => {
       id: 'p1',
       title: 'X',
     });
+  });
+
+  // Rows the allOf form cannot carry soundly keep the pre-#150 inline shape.
+  const emitItem = (item: z.ZodType): Schema => {
+    const app = new OpenAPIHono();
+    app.openAPIRegistry.registerPath({
+      method: 'get',
+      path: '/item',
+      responses: {
+        200: { description: 'item', content: { 'application/json': { schema: item } } },
+      },
+    });
+    const doc = app.getOpenAPI31Document({ openapi: '3.1.0', info: { title: 't', version: '1' } });
+    const responses = doc.paths['/item']?.get?.responses as Record<string, Schema>;
+    return (responses['200'] as { content: { 'application/json': { schema: Schema } } }).content[
+      'application/json'
+    ].schema;
+  };
+  const inlinesWithPost = (item: z.ZodObject) => {
+    const schema = emitItem(withIncludableRelations(item, commentMeta, ['post']));
+    expect(schema).not.toHaveProperty('allOf');
+    expect(Object.keys(schema.properties as Schema)).toEqual(['id', 'post']);
+  };
+
+  it('inlines a strict or typed-catchall row, whose component would reject the relations', () => {
+    inlinesWithPost(z.strictObject({ id: z.string() }).meta({ id: 'IncludeStrictRow' }));
+    inlinesWithPost(
+      z.object({ id: z.string() }).catchall(z.string()).meta({ id: 'IncludeCatchallRow' }),
+    );
+  });
+
+  it('inlines a row built on a Zod copy @hono/zod-openapi did not extend', () => {
+    // The CommonJS build is a second Zod instance: its schemas have no `.openapi`.
+    const otherZod = createRequire(import.meta.url)('zod') as typeof z;
+    const row = otherZod.object({ id: otherZod.string() }).meta({ id: 'IncludeOtherZodRow' });
+    expect('openapi' in row).toBe(false);
+    inlinesWithPost(row);
   });
 });
