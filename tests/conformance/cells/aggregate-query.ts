@@ -10,6 +10,8 @@
  *
  * - `?limit=` / `?offset=` page grouped results; `totalGroups` is the count
  *   before paging;
+ * - `?orderBy=` sorts groups by an aggregate alias or a group key before
+ *   paging (prisma's native `groupBy` included);
  * - a non-integer or zero limit is `400 VALIDATION_ERROR`, one above `maxLimit` is
  *   `400 AGGREGATION_ERROR`;
  * - `?withDeleted=true` counts soft-deleted rows, `=false` (or absent) does
@@ -44,6 +46,25 @@ export function registerAggregateQueryCells(_descriptor: AdapterDescriptor, ctx:
       200,
     );
     expect(rest.groups).toHaveLength(2);
+  });
+
+  test('aggregate: ?orderBy sorts groups by an aggregate value or a group key before paging', async () => {
+    const { app } = ctx();
+    await seedFilterRows(app, '/items');
+
+    const firstRole = async (query: string) =>
+      (
+        await expectSuccess<AggregateBody>(
+          await app.request(`/items/aggregate?count=*&groupBy=role&limit=1${query}`),
+          200,
+        )
+      ).groups?.[0]?.key.role;
+
+    // Counts: admin 1, user 2, guest 2, so admin is the only unique extreme.
+    expect(await firstRole('&orderBy=count&orderDirection=asc')).toBe('admin');
+    // Group keys sort admin < guest < user.
+    expect(await firstRole('&orderBy=role&orderDirection=desc')).toBe('user');
+    expect(await firstRole('&orderBy=role&offset=1')).toBe('guest');
   });
 
   test('aggregate: a malformed or zero limit is 400 VALIDATION_ERROR, one above maxLimit is 400 AGGREGATION_ERROR', async () => {
