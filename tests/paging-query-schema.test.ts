@@ -23,6 +23,10 @@ class ItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
   protected override defaultPerPage = 25;
   protected override maxPerPage = 50;
 }
+class CappedItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
+  _meta = itemMeta;
+  protected override maxPerPage = 10;
+}
 class SortedItemList extends MemoryListEndpoint<Record<string, never>, ItemMeta> {
   _meta = itemMeta;
   protected override sortFields = ['name', 'id'];
@@ -68,6 +72,7 @@ beforeAll(async () => {
     search: ItemSearch as never,
     export: ItemExport as never,
   });
+  registerCrud(app, '/capped-items', { list: CappedItemList as never });
   registerCrud(app, '/sorted-items', { list: SortedItemList as never });
   registerCrud(app, '/unsorted-items', { list: UnsortedDefaultList as never });
   registerCrud(app, '/cursor-items', { list: CursorItemList as never });
@@ -86,6 +91,15 @@ describe('list query schema', () => {
       minimum: 1,
       maximum: 50,
       default: 25,
+    });
+  });
+
+  it('caps the per_page default at a ceiling below defaultPerPage', () => {
+    expect(queryParam('/capped-items', 'per_page')).toEqual({
+      type: 'integer',
+      minimum: 1,
+      maximum: 10,
+      default: 10,
     });
   });
 

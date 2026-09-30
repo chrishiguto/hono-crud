@@ -227,11 +227,17 @@ export function boundedPageSize(max: number) {
  * a value outside the documented range is refused with a 400, never clamped.
  * `parseListFilters` parses paging with this shape too, so an endpoint
  * mounted without the route validator is held to the same bounds.
+ *
+ * The `per_page` default is capped at `maxPerPage`: Zod fills a default
+ * without checking it against the bounds, and `parseListFilters` then
+ * re-parses it, so an endpoint that lowers only `maxPerPage` below the
+ * inherited `defaultPerPage` would answer every plain request with a 400
+ * (and document a default its own maximum forbids).
  */
 export function pagingQueryShape(defaultPerPage: number, maxPerPage: number) {
   return {
     page: z.coerce.number().int().min(1).default(1),
-    per_page: boundedPageSize(maxPerPage).default(defaultPerPage),
+    per_page: boundedPageSize(maxPerPage).default(Math.min(defaultPerPage, maxPerPage)),
   };
 }
 
