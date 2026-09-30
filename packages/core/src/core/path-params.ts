@@ -3,10 +3,13 @@
  *
  * Nested registrations put params in the base path that no endpoint declares:
  * endpoints only know their own sub-route params (`:id`, `:version`). These
- * helpers declare the base-path params in the emitted doc.
+ * helpers declare the base-path params in the emitted doc and reject base
+ * paths whose params collide with a sub-route's.
  */
 
 import { z } from 'zod';
+import { CRUD_ROUTES, type CrudEndpointName } from './crud-routes';
+import { singularize } from './operation-id';
 import type { OpenAPIRouteSchema } from './types';
 
 /**
@@ -63,4 +66,38 @@ export function declareBasePathParams(
       params: merged as unknown as NonNullable<OpenAPIRouteSchema['request']>['params'],
     },
   };
+}
+
+/**
+ * Fail at setup when a base-path param shares its name with a param of a
+ * registered sub-route: `registerCrud(app, '/notes/:id/comments', { read })`
+ * mounts `/notes/:id/comments/:id`, whose `id` resolves to the NOTE's id, so
+ * every item request silently looks up the wrong record.
+ */
+export function assertNoBasePathParamClash(
+  caller: string,
+  basePath: string,
+  slots: Iterable<CrudEndpointName>,
+): void {
+  const baseParams = new Set(pathParamNames(basePath));
+  if (baseParams.size === 0) return;
+  const registered = new Set(slots);
+  for (const [name, , subPath] of CRUD_ROUTES) {
+    if (!registered.has(name)) continue;
+    const clash = pathParamNames(subPath).find((param) => baseParams.has(param));
+    if (!clash) continue;
+    throw new Error(
+      `${caller}: base path "${basePath}" has a ":${clash}" param, which the ${name} route ` +
+        `"${basePath}${subPath}" also uses, so its requests would read the base path's value. ` +
+        `Rename the base-path param (e.g. ":${suggestParamName(basePath, clash)}").`,
+    );
+  }
+}
+
+/** `/notes/:id/comments` + `id` → `noteId`: the singular preceding segment + `Id`. */
+function suggestParamName(basePath: string, param: string): string {
+  const segments = basePath.split('/');
+  const index = segments.findIndex((segment) => pathParamNames(segment)[0] === param);
+  const parent = index > 0 ? singularize(segments[index - 1]).replace(/[^A-Za-z0-9]/g, '') : '';
+  return parent ? `${parent}${param[0].toUpperCase()}${param.slice(1)}` : `parent${param}`;
 }

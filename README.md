@@ -604,6 +604,8 @@ const v2 = fromHono(new OpenAPIHono(), {
 
 `registerCrud(app, '/notes/:noteId/comments', endpoints)` mounts a resource under a parent. Base-path params (`noteId`) are declared as string path params on every route in the spec; declare your own `request.params` to type one more tightly (`z.object({ noteId: z.uuid() })`). The endpoints don't scope by the parent on their own — filter or check it in a hook.
 
+A base-path param can't share a name with a sub-route param: `/notes/:id/comments` with a `read` endpoint would mount `/notes/:id/comments/:id`, where `id` resolves to the note's id. `registerCrud` throws at setup in that case; name the parent param (`:noteId`) instead. Collection-only registrations (`{ list }`) under such a path are fine.
+
 ## Examples
 
 See the [examples/](./examples) directory for complete working applications:

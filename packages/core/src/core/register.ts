@@ -4,6 +4,7 @@ import type { MergePath, Schema } from 'hono/types';
 import { setContextVar } from '../utils/context';
 import { CRUD_ROUTES, type CrudEndpointName } from './crud-routes';
 import { type HonoOpenAPIApp, getHandlerForApp } from './openapi';
+import { assertNoBasePathParamClash } from './path-params';
 import { recordCrudResource } from './resource-registry';
 import type { OpenAPIRoute } from './route';
 import type { CrudResourcesSchema, CrudSchema, ToHonoPath } from './rpc-types';
@@ -206,6 +207,11 @@ export function registerCrud<
   const normalizedPath = basePath.endsWith('/') ? basePath.slice(0, -1) : basePath;
   const typedApp = app as HonoOpenAPIApp<E>;
   const { middlewares = [], endpointMiddlewares = {}, responseEnvelope } = options ?? {};
+  assertNoBasePathParamClash(
+    'registerCrud()',
+    normalizedPath,
+    CRUD_ROUTES.map(([name]) => name).filter((name) => endpoints[name]),
+  );
 
   /**
    * Stash the configured `ResponseEnvelope` on the request context so the
