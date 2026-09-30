@@ -828,10 +828,12 @@ export abstract class CrudEndpoint<
   /**
    * Appends the `?field=` / `?field[op]=` filter params to a query-schema
    * `shape`. Shared by List / Search / Aggregate. Values stay strings on the
-   * wire; `eq`/`ne` on a string enum field are typed as that enum, so the doc
-   * (and any client generated from it) lists the members and the validator
-   * rejects a typo before the handler runs. Other operators stay strings:
-   * `in`/`nin`/`between` carry comma lists and `like`/`ilike` a partial needle.
+   * wire; an operator taking a single value (`eq`, `ne`, `gt`, `gte`, `lt`,
+   * `lte`) on a string enum field is typed as that enum, so the doc (and any
+   * client generated from it) lists the members and the validator rejects a
+   * typo before the handler runs. Other operators stay strings: `in`/`nin`/
+   * `between` carry comma lists, `like`/`ilike` a partial needle, and `null`
+   * a boolean flag.
    *
    * The enum is rebuilt from its members instead of reusing the field schema,
    * so the field's `.default()` (which zod would apply to an absent param,
@@ -846,8 +848,7 @@ export abstract class CrudEndpoint<
   ): void {
     const modelShape: Record<string, unknown> = this.getModelSchema().shape;
     const param = (field: string, operator: FilterOperator): z.ZodTypeAny => {
-      const members =
-        operator === 'eq' || operator === 'ne' ? filterEnumValues(modelShape[field]) : undefined;
+      const members = filterEnumValues(operator, modelShape[field]);
       return members ? z.enum(members).optional() : z.string().optional();
     };
 
