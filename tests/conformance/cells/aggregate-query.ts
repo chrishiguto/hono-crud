@@ -10,7 +10,7 @@
  *
  * - `?limit=` / `?offset=` page grouped results; `totalGroups` is the count
  *   before paging;
- * - a non-integer limit is `400 VALIDATION_ERROR`, one above `maxLimit` is
+ * - a non-integer or zero limit is `400 VALIDATION_ERROR`, one above `maxLimit` is
  *   `400 AGGREGATION_ERROR`;
  * - `?withDeleted=true` counts soft-deleted rows, `=false` (or absent) does
  *   not, and neither is ever treated as a filter.
@@ -46,10 +46,16 @@ export function registerAggregateQueryCells(_descriptor: AdapterDescriptor, ctx:
     expect(rest.groups).toHaveLength(2);
   });
 
-  test('aggregate: a malformed limit is 400 VALIDATION_ERROR, one above maxLimit is 400 AGGREGATION_ERROR', async () => {
+  test('aggregate: a malformed or zero limit is 400 VALIDATION_ERROR, one above maxLimit is 400 AGGREGATION_ERROR', async () => {
     const { app } = ctx();
     await expectError(
       await app.request('/items/aggregate?count=*&limit=abc'),
+      400,
+      'VALIDATION_ERROR',
+    );
+    // A zero limit would page as "no limit", skipping defaultLimit and maxLimit.
+    await expectError(
+      await app.request('/items/aggregate?count=*&groupBy=role&limit=0'),
       400,
       'VALIDATION_ERROR',
     );

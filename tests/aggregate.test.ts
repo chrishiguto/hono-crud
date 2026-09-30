@@ -169,6 +169,13 @@ describe('Aggregations', () => {
       expect(result.offset).toBe(5);
     });
 
+    it('should reject a zero limit but accept a zero offset', () => {
+      expect(() => parseAggregateQuery({ count: '*', limit: '0' })).toThrow(
+        "'limit' expects an integer >= 1, got '0'",
+      );
+      expect(parseAggregateQuery({ count: '*', offset: '0' }).offset).toBe(0);
+    });
+
     it('should collect filters', () => {
       const result = parseAggregateQuery({
         count: '*',
@@ -545,8 +552,9 @@ describe('Aggregations', () => {
       expect(paged.body.result.groups).toHaveLength(1);
     });
 
-    it('rejects a malformed or oversized limit with 400', async () => {
-      for (const limit of ['abc', '', '-1']) {
+    it('rejects a malformed, zero or oversized limit with 400', async () => {
+      // A zero limit would page as "no limit", skipping defaultLimit and maxLimit.
+      for (const limit of ['abc', '', '-1', '0']) {
         const { status, body } = await aggregate(`/products/aggregate?count=*&limit=${limit}`);
         expect(status, limit).toBe(400);
         expect(body.error?.code).toBe('VALIDATION_ERROR');
