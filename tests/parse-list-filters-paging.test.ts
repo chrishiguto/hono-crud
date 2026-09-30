@@ -57,6 +57,14 @@ describe('parseListFilters paging', () => {
     }
   });
 
+  it('passes a filter named like an Object.prototype member through as a filter', () => {
+    const { filters } = parseListFilters(
+      { constructor: 'a', valueOf: 'b' },
+      { filterFields: ['constructor', 'valueOf'] },
+    );
+    expect(filters.map((f) => f.field)).toEqual(['constructor', 'valueOf']);
+  });
+
   it('bounds the cursor limit only when cursor pagination is enabled, with no default', () => {
     const cursor = { cursorPaginationEnabled: true, maxPerPage: 40 };
     expect(parseListFilters({}, cursor).options.limit).toBeUndefined();
