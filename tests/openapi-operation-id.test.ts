@@ -13,6 +13,7 @@ import {
   defineModel,
   fromHono,
   registerCrud,
+  toOpenApiPaths,
 } from 'hono-crud';
 import { CRUD_ROUTES } from 'hono-crud/core/crud-routes';
 import { defaultOperationId, singularize } from 'hono-crud/core/operation-id';
@@ -144,6 +145,45 @@ describe('default operationId', () => {
     const doc = (await buildPerTenantOpenApi(app, { tenantId: 't1' })) as Doc;
     expect(doc.paths?.['/comments/{id}']?.get?.operationId).toBe('getComment');
     expect(doc.paths?.['/comments']?.get?.operationId).toBe('listComments');
+  });
+});
+
+describe('toOpenApiPaths operationId', () => {
+  const idsOf = (paths: Record<string, Record<string, unknown>>) =>
+    Object.fromEntries(
+      Object.entries(paths).flatMap(([path, item]) =>
+        Object.entries(item).map(([method, op]) => [
+          `${method.toUpperCase()} ${path}`,
+          (op as Operation).operationId,
+        ]),
+      ),
+    );
+
+  it('matches registerCrud for the same base path', () => {
+    const app = newApp();
+    registerCrud(app, '/notes/:noteId/comments', commentEndpoints());
+    const fromApp = Object.values(operationIds(app));
+    const fragment = idsOf(
+      toOpenApiPaths(commentEndpoints(), { basePath: '/notes/{noteId}/comments' }),
+    );
+    expect(Object.values(fragment)).toEqual(fromApp);
+    expect(fragment['GET /notes/{noteId}/comments']).toBe('listNoteComments');
+  });
+
+  it('derives the resource from tableName without a base path', () => {
+    const fragment = idsOf(toOpenApiPaths(commentEndpoints()));
+    expect(fragment).toEqual({
+      'POST /': 'createComment',
+      'GET /': 'listComments',
+      'GET /{id}': 'getComment',
+      'PATCH /{id}': 'updateComment',
+      'DELETE /{id}': 'deleteComment',
+    });
+  });
+
+  it('emits no default with operationIds: false', () => {
+    const fragment = idsOf(toOpenApiPaths(commentEndpoints(), { operationIds: false }));
+    expect(Object.values(fragment)).toEqual(Array(5).fill(undefined));
   });
 });
 
