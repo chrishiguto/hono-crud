@@ -191,7 +191,8 @@ export class HonoOpenAPIHandler<E extends Env = Env> {
     const named = crud
       ? applyDefaultOperationId(tagged, crud, instanceModel(instance), this.options.operationIds)
       : tagged;
-    this.claimOperationId(routeKey, named.operationId, named !== tagged);
+    // Any id the endpoint didn't set explicitly was generated (default or naming function).
+    this.claimOperationId(routeKey, named.operationId, tagged.operationId === undefined);
     const schema = crud ? declareBasePathParams(named, crud.basePath) : named;
 
     this.routes.set(routeKey, {
