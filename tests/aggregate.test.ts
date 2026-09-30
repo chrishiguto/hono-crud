@@ -592,6 +592,18 @@ describe('Aggregations', () => {
       expect(body.result.values.count).toBe(3);
     });
 
+    it('filters a date field by equality instead of matching every row', async () => {
+      const deletedAt = new Date('2026-01-02T03:04:05.000Z');
+      const store = getStore<Record<string, unknown>>('products');
+      store.set('8', { ...(store.get('8') as Record<string, unknown>), deletedAt });
+
+      const { status, body } = await aggregate(
+        `/products/aggregate?count=*&withDeleted=true&deletedAt=${deletedAt.toISOString()}`,
+      );
+      expect(status).toBe(200);
+      expect(body.result.values?.count).toBe(1);
+    });
+
     it('ignores ?withDeleted when the model disallows querying deleted rows', async () => {
       const { status, body } = await aggregate(
         '/locked-products/aggregate?count=*&withDeleted=true',

@@ -5,7 +5,11 @@
  * used to select the `true` rows, and `integer({ mode: 'timestamp' })` calls
  * `.getTime()` on the bound value, so a raw string threw a TypeError.
  */
-import { type DrizzleDatabaseConstraint, createDrizzleCrud } from '@hono-crud/drizzle';
+import {
+  DrizzleAggregateEndpoint,
+  type DrizzleDatabaseConstraint,
+  createDrizzleCrud,
+} from '@hono-crud/drizzle';
 import { clearStorage, createMemoryCrud } from '@hono-crud/memory';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { createClient } from '@libsql/client';
@@ -157,9 +161,14 @@ class TodoList extends Todos.List {
   filterConfig = { due: ['gte', 'lt'] as const, priority: ['gte'] as const };
 }
 
+class TodoAggregate extends DrizzleAggregateEndpoint {
+  _meta = todoMeta;
+  db = db as unknown as DrizzleDatabaseConstraint;
+}
+
 describe('filter coercion (drizzle + typed sqlite column modes)', () => {
   const app = fromHono(new OpenAPIHono());
-  registerCrud(app, '/todos', { list: TodoList });
+  registerCrud(app, '/todos', { list: TodoList, aggregate: TodoAggregate });
 
   beforeAll(async () => {
     await client.execute(`
@@ -186,6 +195,13 @@ describe('filter coercion (drizzle + typed sqlite column modes)', () => {
   it('date filters on a timestamp-mode column bind a Date instead of throwing', async () => {
     expect(await titles(await app.request('/todos?due[gte]=2026-06-01'))).toEqual(['write']);
     expect(await titles(await app.request('/todos?due[lt]=2026-06-01'))).toEqual(['ship']);
+  });
+
+  it('aggregate date equality binds a Date instead of matching every row', async () => {
+    const res = await app.request('/todos/aggregate?count=*&due=2026-05-01T00:00:00.000Z');
+    expect(res.status, await res.clone().text()).toBe(200);
+    const body = (await res.json()) as { result: { values: { count: number } } };
+    expect(body.result.values.count).toBe(1);
   });
 
   it('numeric filters still work on plain integer columns', async () => {

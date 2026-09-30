@@ -220,9 +220,12 @@ export abstract class AggregateEndpoint<
     const allowed = this.getFilterableFields();
     const modelShape: Record<string, unknown> = this.getModelSchema().shape;
     const kept: Record<string, unknown> = {};
-    for (const [field, value] of Object.entries(filters)) {
+    for (const [field, raw] of Object.entries(filters)) {
       if (!allowed.includes(field)) continue;
-      kept[field] = coerceFilterValue('eq', String(value), field, modelShape[field]);
+      const value = coerceFilterValue('eq', String(raw), field, modelShape[field]);
+      // Adapters read an object filter value as `{ operator: value }`, so a
+      // bare `Date` (a date field) would match every row; spell it as `eq`.
+      kept[field] = typeof value === 'object' && value !== null ? { eq: value } : value;
     }
     return Object.keys(kept).length > 0 ? kept : undefined;
   }
