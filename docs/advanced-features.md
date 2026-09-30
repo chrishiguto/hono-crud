@@ -558,7 +558,8 @@ GET /users/aggregate?count=*&withDeleted=true
 ```
 
 `limit` and `offset` page grouped results (`totalGroups` reports the count
-before paging); a non-integer value is `400 VALIDATION_ERROR` and a `limit`
+before paging); `limit` must be a positive integer and `offset` a
+non-negative one (`400 VALIDATION_ERROR` otherwise), and a `limit`
 above `maxLimit` (default 1000) is `400 AGGREGATION_ERROR`. On a soft-delete
 model, `?withDeleted=true` (the model's `softDelete.queryParam`) includes
 deleted rows, unless the model sets `allowQueryDeleted: false`.

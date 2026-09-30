@@ -47,15 +47,17 @@ export interface AggregateQueryParseOptions {
 }
 
 /**
- * Parse a `limit` / `offset` query value. The query schema declares them as
- * strings: a `z.coerce.number()` there turned them into numbers before this
- * parser ran, so they were silently dropped, and `?limit=` coerced to 0.
+ * Parse a `limit` / `offset` query value as an integer >= `min`, or throw a
+ * 400. The query schema keeps both as strings so this is their only
+ * validation (a coercing schema would hand this parser numbers it skips).
+ * `limit` starts at 1: paging reads a 0 limit as "no limit", so `?limit=0`
+ * would skip both `defaultLimit` and `maxLimit`.
  */
-function parseNonNegativeInteger(name: string, value: unknown): number | undefined {
+function parseIntegerParam(name: string, value: unknown, min: number): number | undefined {
   if (value === undefined) return undefined;
   const raw = String(value).trim();
-  if (!/^\d+$/.test(raw)) {
-    throw new InputValidationException(`'${name}' expects a non-negative integer, got '${raw}'`);
+  if (!/^\d+$/.test(raw) || Number(raw) < min) {
+    throw new InputValidationException(`'${name}' expects an integer >= ${min}, got '${raw}'`);
   }
   return Number(raw);
 }
@@ -115,8 +117,8 @@ export function parseAggregateQuery(
   const orderDirection = query.orderDirection === 'desc' ? 'desc' : 'asc';
 
   // Parse pagination
-  const limit = parseNonNegativeInteger('limit', query.limit);
-  const offset = parseNonNegativeInteger('offset', query.offset);
+  const limit = parseIntegerParam('limit', query.limit, 1);
+  const offset = parseIntegerParam('offset', query.offset, 0);
 
   // The soft-delete param is always reserved (never a filter); it only takes
   // effect when the model lets clients ask for deleted rows.
