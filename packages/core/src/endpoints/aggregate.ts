@@ -210,8 +210,8 @@ export abstract class AggregateEndpoint<
 
   /**
    * Keep only filterable fields and convert each value by the field's type.
-   * Every unreserved query key used to become a filter, so `?page=1` or a
-   * typo reached the adapter as a column name (drizzle threw on it).
+   * The parser hands over every unreserved query key, and the adapter would
+   * look any other key (`?page=1`, a typo) up as a column.
    */
   private toAllowedFilters(
     filters: Record<string, unknown> | undefined,

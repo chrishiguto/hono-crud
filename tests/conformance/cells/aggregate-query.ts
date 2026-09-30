@@ -15,7 +15,7 @@
  * - a non-integer or zero limit is `400 VALIDATION_ERROR`, one above `maxLimit` is
  *   `400 AGGREGATION_ERROR`;
  * - `?withDeleted=true` counts soft-deleted rows, `=false` (or absent) does
- *   not, and neither is ever treated as a filter.
+ *   not, and neither is ever treated as a filter;
  * - filters: with no `filterFields`, every model field filters by equality,
  *   with values checked against the field type (400 on an enum typo or a
  *   non-numeric number); any other query key is ignored, never sent to the
