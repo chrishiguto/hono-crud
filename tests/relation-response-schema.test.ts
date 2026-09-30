@@ -1,8 +1,15 @@
 // Unit tests for `withIncludableRelations` (packages/core/src/relations/
 // response-schema.ts) — the helper that adds includable relations to a List/Read
 // OpenAPI response item schema so `?include=` shapes are documented + typed.
+import {
+  MemoryCreateEndpoint,
+  MemoryListEndpoint,
+  MemoryReadEndpoint,
+  MemorySearchEndpoint,
+} from '@hono-crud/memory';
+import { OpenAPIHono } from '@hono/zod-openapi';
 import type { MetaInput, RelationsConfig } from 'hono-crud';
-import { defineModels } from 'hono-crud';
+import { defineMeta, defineModel, defineModels, fromHono } from 'hono-crud';
 import { withIncludableRelations } from 'hono-crud/internal';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -85,5 +92,120 @@ describe('withIncludableRelations', () => {
   it('returns the item schema unchanged when the model has no relations', () => {
     const extended = withIncludableRelations(itemSchema, metaWith(undefined), ['post']);
     expect(extended).toBe(itemSchema);
+  });
+});
+
+// OpenAPI emission through the real registration path. Named (`.meta({ id })`)
+// schemas must keep their component `$ref` on every verb, and a to-one
+// relation must never leak nullability into the shared component.
+describe('withIncludableRelations OpenAPI emission', () => {
+  type Schema = Record<string, unknown>;
+  type Doc = {
+    components?: { schemas?: Record<string, Schema> };
+    paths: Record<string, Record<string, { responses: Record<string, Schema> }>>;
+  };
+
+  const PostRow = z.object({ id: z.string(), title: z.string() }).meta({ id: 'IncludePost' });
+  const CommentRow = z
+    .object({ id: z.string(), postId: z.string().nullable() })
+    .meta({ id: 'IncludeComment' });
+  const commentMeta = defineMeta({
+    model: defineModel({
+      tableName: 'include_comments',
+      schema: CommentRow,
+      primaryKeys: ['id'],
+      relations: {
+        post: { type: 'belongsTo', model: 'posts', foreignKey: 'postId', schema: PostRow },
+      },
+    }),
+  });
+  const postMeta = defineMeta({
+    model: defineModel({ tableName: 'include_posts', schema: PostRow, primaryKeys: ['id'] }),
+  });
+
+  class CommentCreate extends MemoryCreateEndpoint {
+    _meta = commentMeta;
+  }
+  class CommentList extends MemoryListEndpoint {
+    _meta = commentMeta;
+    allowedIncludes = ['post'];
+  }
+  class CommentRead extends MemoryReadEndpoint {
+    _meta = commentMeta;
+    allowedIncludes = ['post'];
+  }
+  class CommentSearch extends MemorySearchEndpoint {
+    _meta = commentMeta;
+    allowedIncludes = ['post'];
+  }
+  class PostRead extends MemoryReadEndpoint {
+    _meta = postMeta;
+  }
+
+  async function emit(openapi: '3.0.0' | '3.1.0'): Promise<Doc> {
+    const app = fromHono(new OpenAPIHono());
+    // Relation routes first: the related schema's first use is the to-one include.
+    app.get('/comments', CommentList);
+    app.get('/comments/search', CommentSearch);
+    app.get('/comments/:id', CommentRead);
+    app.post('/comments', CommentCreate);
+    app.get('/posts/:id', PostRead);
+    app.doc('/openapi.json', { openapi, info: { title: 't', version: '1' } });
+    return (await app.request('/openapi.json')).json() as Promise<Doc>;
+  }
+
+  const result = (doc: Doc, path: string, method: string): Schema => {
+    const responses = doc.paths[path]?.[method]?.responses ?? {};
+    const response = (responses['200'] ?? responses['201']) as {
+      content: { 'application/json': { schema: { properties: { result: Schema } } } };
+    };
+    return response.content['application/json'].schema.properties.result;
+  };
+
+  const extendsComment = (schema: Schema) =>
+    expect(schema.allOf).toEqual([
+      { $ref: '#/components/schemas/IncludeComment' },
+      expect.objectContaining({ properties: { post: expect.any(Object) } }),
+    ]);
+
+  for (const openapi of ['3.0.0', '3.1.0'] as const) {
+    it(`keeps the item $ref on list, read and search (${openapi})`, async () => {
+      const doc = await emit(openapi);
+      expect(result(doc, '/comments', 'post')).toEqual({
+        $ref: '#/components/schemas/IncludeComment',
+      });
+      extendsComment(result(doc, '/comments', 'get').items as Schema);
+      extendsComment(result(doc, '/comments/{id}', 'get'));
+      const searchItem = (result(doc, '/comments/search', 'get').items as Schema)
+        .properties as Record<string, Schema>;
+      extendsComment(searchItem.item as Schema);
+    });
+
+    it(`keeps a to-one relation nullable without touching its component (${openapi})`, async () => {
+      const doc = await emit(openapi);
+      const post = doc.components?.schemas?.IncludePost ?? {};
+      expect(post).not.toHaveProperty('nullable');
+      expect(post.type).toBe('object');
+      expect(result(doc, '/posts/{id}', 'get')).toEqual({
+        $ref: '#/components/schemas/IncludePost',
+      });
+      const relations = (result(doc, '/comments/{id}', 'get').allOf as Schema[])[1] as {
+        properties: { post: { anyOf: Schema[] } };
+      };
+      expect(relations.properties.post.anyOf[0]).toEqual({
+        $ref: '#/components/schemas/IncludePost',
+      });
+    });
+  }
+
+  it('stays one flat object in Zod JSON Schema (MCP outputSchema)', () => {
+    const item = withIncludableRelations(CommentRow, commentMeta, ['post']);
+    const json = z.toJSONSchema(item, { io: 'output' }) as Schema;
+    expect(json).not.toHaveProperty('allOf');
+    expect(Object.keys(json.properties as Schema)).toEqual(['id', 'postId', 'post']);
+    expect(item.parse({ id: 'c1', postId: 'p1', post: { id: 'p1', title: 'X' } }).post).toEqual({
+      id: 'p1',
+      title: 'X',
+    });
   });
 });
