@@ -314,7 +314,8 @@ export function parseListFilters(
 
   for (const [key, rawValue] of Object.entries(query)) {
     if (rawValue === undefined || rawValue === null) continue;
-    if (key in pagingShape) continue;
+    // Own keys only: `in` would also match `constructor`, `valueOf`, ...
+    if (Object.hasOwn(pagingShape, key)) continue;
 
     const value = String(rawValue);
 
