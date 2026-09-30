@@ -1,6 +1,8 @@
 /**
  * Nested `registerCrud` base paths (`/notes/:noteId/comments`): base-path
- * params are declared in the emitted doc.
+ * params are declared in the emitted doc, and a base-path param that shadows
+ * a sub-route param (`/notes/:id/comments` + read → `/:id` twice) fails at
+ * setup instead of silently reading the parent's id.
  */
 import { MemoryAdapters, clearStorage } from '@hono-crud/memory';
 import { OpenAPIHono } from '@hono/zod-openapi';
@@ -111,6 +113,30 @@ describe('base-path params are declared', () => {
     const res = await app.request(`/notes/n1/comments/${id}`);
     expect(res.status).toBe(200);
     expect(((await res.json()) as { result: { id: string } }).result.id).toBe(id);
+  });
+});
+
+describe('base-path param clash', () => {
+  it('fails at setup when the base path reuses a sub-route param', () => {
+    const app = fromHono(new OpenAPIHono());
+    expect(() =>
+      registerCrud(app, '/notes/:id/comments', { read: commentEndpoints().read }),
+    ).toThrow(
+      /registerCrud\(\): base path "\/notes\/:id\/comments" has a ":id" param, which the read route "\/notes\/:id\/comments\/:id" also uses.*":noteId"/,
+    );
+  });
+
+  it('allows collection-only registrations under that base path', () => {
+    const app = fromHono(new OpenAPIHono());
+    expect(() =>
+      registerCrud(app, '/notes/:id/comments', { list: commentEndpoints().list }),
+    ).not.toThrow();
+  });
+
+  it('fails in toOpenApiPaths too', () => {
+    expect(() => toOpenApiPaths(commentEndpoints(), { basePath: '/notes/{id}/comments' })).toThrow(
+      /toOpenApiPaths\(\): base path/,
+    );
   });
 });
 

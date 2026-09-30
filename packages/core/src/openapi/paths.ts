@@ -32,7 +32,7 @@ import type { GeneratedEndpoints } from '../config/index';
 import { CRUD_ROUTES, type CrudEndpointName } from '../core/crud-routes';
 import { instanceModel, resolveInstanceSchemaTags } from '../core/generate-endpoint-class';
 import { type OperationIdsOption, applyDefaultOperationId } from '../core/operation-id';
-import { declareBasePathParams } from '../core/path-params';
+import { assertNoBasePathParamClash, declareBasePathParams } from '../core/path-params';
 import type { OpenAPIRouteSchema } from '../core/types';
 import { toOpenApiPath } from './utils';
 
@@ -130,6 +130,11 @@ export function toOpenApiPaths(
   const app = new OpenAPIHono();
   let registered = 0;
   const endpointSlots: EndpointSlots = endpoints;
+  assertNoBasePathParamClash(
+    'toOpenApiPaths()',
+    basePath,
+    CRUD_ROUTES.map(([name]) => name).filter((name) => endpointSlots[name]),
+  );
 
   for (const [name, method, subPath] of CRUD_ROUTES) {
     const EndpointClass = endpointSlots[name];
