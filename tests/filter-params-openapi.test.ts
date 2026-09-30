@@ -1,9 +1,10 @@
 /**
- * Filter query params are typed from the model field: `eq`/`ne` on a string
- * enum field document (and validate) the members, while comma-list and
- * substring operators stay plain strings. The enum is rebuilt from its
- * members, so the field's default, description, and component id stay off
- * the param — a leaked `.default()` would filter every request that omits it.
+ * Filter query params are typed from the model field: single-value operators
+ * (`eq`/`ne`/`gt`/...) on a string enum field document (and validate) the
+ * members, while comma-list, substring, and `null` operators stay plain
+ * strings. The enum is rebuilt from its members, so the field's default,
+ * description, and component id stay off the param — a leaked `.default()`
+ * would filter every request that omits it.
  */
 import { clearStorage, createMemoryCrud } from '@hono-crud/memory';
 import { OpenAPIHono } from '@hono/zod-openapi';
@@ -27,7 +28,7 @@ const noteMeta = defineMeta({
 });
 const Notes = createMemoryCrud(noteMeta);
 
-const FILTER_CONFIG = { status: ['ne', 'in', 'like'] as const };
+const FILTER_CONFIG = { status: ['ne', 'gt', 'in', 'like', 'null'] as const };
 
 class NoteList extends Notes.List {
   filterFields = ['kind'];
@@ -59,14 +60,16 @@ const STATUS_ENUM = { type: 'string', enum: ['draft', 'published'] };
 const EXPECTED = {
   status: STATUS_ENUM,
   'status[ne]': STATUS_ENUM,
+  'status[gt]': STATUS_ENUM,
   'status[in]': { type: 'string' },
   'status[like]': { type: 'string' },
+  'status[null]': { type: 'string' },
 };
 
 describe('filter params typed from the model field', () => {
   const info = { openapi: '3.0.0', info: { title: 't', version: '1' } };
 
-  it('documents enum members on eq/ne in both the 3.0 and 3.1 documents', () => {
+  it('documents enum members on single-value operators in both the 3.0 and 3.1 documents', () => {
     const app = buildApp();
     const docs = [
       app.getOpenAPIDocument(info) as unknown as DocShape,
@@ -106,7 +109,11 @@ describe('filter params typed from the model field', () => {
     });
 
     it('rejects a typo at the validator with the standard 400 envelope', async () => {
-      for (const path of ['/notes?status=publised', '/notes/search?q=a&status[ne]=publised']) {
+      for (const path of [
+        '/notes?status=publised',
+        '/notes?status[gt]=publised',
+        '/notes/search?q=a&status[ne]=publised',
+      ]) {
         const res = await app.request(path);
         expect(res.status, path).toBe(400);
         const body = (await res.json()) as { success: boolean; error: { code: string } };

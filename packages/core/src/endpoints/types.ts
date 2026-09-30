@@ -157,11 +157,31 @@ function enumKind(values: unknown[]): FilterValueKind {
 }
 
 /**
- * The members of a string `z.enum` / `z.literal` field, else `undefined`.
- * Shares the resolver the filter coercion uses, so a documented enum param
- * and the runtime membership check can never disagree.
+ * How a raw `?field[operator]=` value is read: `null` takes a boolean flag,
+ * `like` / `ilike` a raw substring needle, `in` / `nin` / `between` a comma
+ * list, and every other operator a single value of the field's kind.
  */
-export function filterEnumValues(fieldSchema: unknown): readonly string[] | undefined {
+type FilterValueForm = 'flag' | 'needle' | 'list' | 'single';
+
+function filterValueForm(operator: FilterOperator): FilterValueForm {
+  if (operator === 'null') return 'flag';
+  if (operator === 'like' || operator === 'ilike') return 'needle';
+  if (operator === 'in' || operator === 'nin' || operator === 'between') return 'list';
+  return 'single';
+}
+
+/**
+ * The members a `?field[operator]=` value must be one of: a string `z.enum` /
+ * `z.literal` field's members when the operator takes a single value, else
+ * `undefined`. Shares the operator split and the resolver the filter
+ * coercion uses, so a documented enum param and the runtime membership check
+ * can never disagree.
+ */
+export function filterEnumValues(
+  operator: FilterOperator,
+  fieldSchema: unknown,
+): readonly string[] | undefined {
+  if (filterValueForm(operator) !== 'single') return undefined;
   const kind = resolveFilterValueKind(fieldSchema);
   return kind.kind === 'enum' ? kind.values : undefined;
 }
@@ -222,14 +242,15 @@ function coerceFilterValue(
   field = '',
   fieldSchema?: unknown,
 ): unknown {
-  if (operator === 'null') {
+  const form = filterValueForm(operator);
+  if (form === 'flag') {
     return raw.toLowerCase() === 'true';
   }
-  if (operator === 'like' || operator === 'ilike') {
+  if (form === 'needle') {
     return raw;
   }
   const kind = fieldSchema === undefined ? OTHER_KIND : resolveFilterValueKind(fieldSchema);
-  if (operator === 'in' || operator === 'nin' || operator === 'between') {
+  if (form === 'list') {
     return raw.split(',').map((v) => coerceScalarFilterValue(field, v.trim(), kind));
   }
   return coerceScalarFilterValue(field, raw, kind);
