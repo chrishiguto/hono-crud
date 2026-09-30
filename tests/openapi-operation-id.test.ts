@@ -1,9 +1,9 @@
-import { MemoryAdapters } from '@hono-crud/memory';
 /**
  * Default OpenAPI `operationId`s for `registerCrud` routes (#151): derived
  * from the endpoint slot and the registered base path, asserted on the
  * emitted 3.0 and 3.1 documents.
  */
+import { MemoryAdapters } from '@hono-crud/memory';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import {
   type OperationIdContext,

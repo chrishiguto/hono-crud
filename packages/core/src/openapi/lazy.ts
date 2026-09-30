@@ -15,6 +15,7 @@ import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { resolveInstanceSchemaTags } from '../core/generate-endpoint-class';
 import type { HonoOpenAPIApp, OpenAPIConfig } from '../core/openapi';
 import { getHandlerForApp } from '../core/openapi';
+import { declareBasePathParams } from '../core/path-params';
 import type { SchemaResolveContext } from '../core/types';
 
 /**
@@ -112,7 +113,9 @@ export async function buildPerTenantOpenApi(
     //
     // The operationId (explicit or the `registerCrud` default) was resolved at
     // registration and is tenant-independent; reuse it so both docs agree.
-    const tagged = resolveInstanceSchemaTags(instance);
+    // Base-path params are declared exactly as `registerRoute` does.
+    const resolved = resolveInstanceSchemaTags(instance);
+    const tagged = route.crud ? declareBasePathParams(resolved, route.crud.basePath) : resolved;
     const operationId = route.schema.operationId;
     const schema = (operationId === undefined ? tagged : { ...tagged, operationId }) as Parameters<
       typeof createRoute
