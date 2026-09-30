@@ -52,7 +52,8 @@ export interface ToOpenApiPathsOptions {
   /**
    * Prefix prepended to every emitted path key (e.g. `'/api/v1/users'`).
    * Slash-normalized: leading slash is ensured, duplicate slashes are
-   * collapsed, a trailing slash is dropped. Defaults to `''` (paths are
+   * collapsed, a trailing slash is dropped. Hono params (`:noteId`) are
+   * emitted in OpenAPI form (`{noteId}`). Defaults to `''` (paths are
    * emitted relative to the resource root, e.g. `/`, `/{id}`).
    */
   basePath?: string;
@@ -163,7 +164,9 @@ export function toOpenApiPaths(
     const effectiveSchema: OpenAPIRouteSchema =
       tagOverride !== undefined ? { ...schema, tags: [tagOverride] } : schema;
 
-    const path = normalizePath(basePath, toOpenApiPath(subPath));
+    // Convert the base path too: the declared base-path params only match a
+    // `{noteId}` template, never a literal `:noteId` segment.
+    const path = toOpenApiPath(normalizePath(basePath, subPath));
 
     const routeConfig = createRoute({
       // `OpenAPIRouteSchema` is a structural subset of zod-openapi's
