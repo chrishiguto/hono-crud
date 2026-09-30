@@ -40,9 +40,18 @@ class NoteSearch extends Notes.Search {
   filterConfig = FILTER_CONFIG;
 }
 
+class NoteExport extends Notes.Export {
+  filterConfig = FILTER_CONFIG;
+}
+
 function buildApp() {
   const app = fromHono(new OpenAPIHono());
-  registerCrud(app, '/notes', { create: Notes.Create, list: NoteList, search: NoteSearch });
+  registerCrud(app, '/notes', {
+    create: Notes.Create,
+    list: NoteList,
+    search: NoteSearch,
+    export: NoteExport,
+  });
   return app;
 }
 
@@ -81,6 +90,7 @@ describe('filter params typed from the model field', () => {
         kind: { type: 'string', enum: ['note'] },
       });
       expect(filterParams(doc, '/notes/search')).toEqual(EXPECTED);
+      expect(filterParams(doc, '/notes/export')).toEqual(EXPECTED);
     }
   });
 
@@ -113,6 +123,7 @@ describe('filter params typed from the model field', () => {
         '/notes?status=publised',
         '/notes?status[gt]=publised',
         '/notes/search?q=a&status[ne]=publised',
+        '/notes/export?status=publised',
       ]) {
         const res = await app.request(path);
         expect(res.status, path).toBe(400);
