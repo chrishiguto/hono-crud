@@ -9,6 +9,7 @@ import {
   type OperationIdsOption,
   applyDefaultOperationId,
 } from './operation-id';
+import { declareBasePathParams } from './path-params';
 import type { OpenAPIRoute } from './route';
 import { isRouteClass, jsonResponse } from './route';
 import type { RouteClassEntry } from './rpc-types';
@@ -66,6 +67,8 @@ export interface RegisteredRoute {
   path: string;
   schema: OpenAPIRouteSchema;
   routeClass: OpenAPIRouteClass;
+  /** Set for routes registered by `registerCrud`: the slot and base path. */
+  crud?: CrudRouteHint;
 }
 
 /**
@@ -185,16 +188,18 @@ export class HonoOpenAPIHandler<E extends Env = Env> {
     // wins, and instances with no `_meta` pass through untouched. Doc-only:
     // the validation path (`getValidatedData`) is unaffected.
     const tagged = resolveInstanceSchemaTags(instance);
-    const schema = crud
+    const named = crud
       ? applyDefaultOperationId(tagged, crud, instanceModel(instance), this.options.operationIds)
       : tagged;
-    this.claimOperationId(routeKey, schema.operationId, schema !== tagged);
+    this.claimOperationId(routeKey, named.operationId, named !== tagged);
+    const schema = crud ? declareBasePathParams(named, crud.basePath) : named;
 
     this.routes.set(routeKey, {
       method,
       path,
       schema,
       routeClass: RouteClass as unknown as OpenAPIRouteClass,
+      crud,
     });
 
     // Create the zod-openapi route config

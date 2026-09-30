@@ -600,6 +600,10 @@ const v2 = fromHono(new OpenAPIHono(), {
 
 - `toOpenApiPaths(endpoints, { basePath })` emits the same ids as `registerCrud` at that path; without a `basePath` it names the resource from `tableName`. It takes the same `operationIds` option.
 
+### Nested base paths
+
+`registerCrud(app, '/notes/:noteId/comments', endpoints)` mounts a resource under a parent. Base-path params (`noteId`) are declared as string path params on every route in the spec; declare your own `request.params` to type one more tightly (`z.object({ noteId: z.uuid() })`). The endpoints don't scope by the parent on their own — filter or check it in a hook.
+
 ## Examples
 
 See the [examples/](./examples) directory for complete working applications:

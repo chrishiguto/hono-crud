@@ -32,6 +32,7 @@ import type { GeneratedEndpoints } from '../config/index';
 import { CRUD_ROUTES, type CrudEndpointName } from '../core/crud-routes';
 import { instanceModel, resolveInstanceSchemaTags } from '../core/generate-endpoint-class';
 import { type OperationIdsOption, applyDefaultOperationId } from '../core/operation-id';
+import { declareBasePathParams } from '../core/path-params';
 import type { OpenAPIRouteSchema } from '../core/types';
 import { toOpenApiPath } from './utils';
 
@@ -144,11 +145,14 @@ export function toOpenApiPaths(
     // default tags into the raw `.schema` field, so reading `getSchema()`
     // directly would drop them. An explicit per-endpoint tag still wins.
     const instance = new EndpointClass();
-    const schema = applyDefaultOperationId(
-      resolveInstanceSchemaTags(instance),
-      { operation: name, basePath },
-      instanceModel(instance),
-      options.operationIds,
+    const schema = declareBasePathParams(
+      applyDefaultOperationId(
+        resolveInstanceSchemaTags(instance),
+        { operation: name, basePath },
+        instanceModel(instance),
+        options.operationIds,
+      ),
+      basePath,
     );
 
     const effectiveSchema: OpenAPIRouteSchema =
