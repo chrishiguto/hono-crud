@@ -109,7 +109,14 @@ export async function buildPerTenantOpenApi(
     // `RouteConfig` shape `createRoute` expects. `OpenAPIRouteSchema` is
     // a structural subset (no required `method`/`path`) — we add those
     // below — but TS can't unify the responses union without the cast.
-    const schema = resolveInstanceSchemaTags(instance) as Parameters<typeof createRoute>[0];
+    //
+    // The operationId (explicit or the `registerCrud` default) was resolved at
+    // registration and is tenant-independent; reuse it so both docs agree.
+    const tagged = resolveInstanceSchemaTags(instance);
+    const operationId = route.schema.operationId;
+    const schema = (operationId === undefined ? tagged : { ...tagged, operationId }) as Parameters<
+      typeof createRoute
+    >[0];
 
     const routeConfig = createRoute({
       ...schema,
