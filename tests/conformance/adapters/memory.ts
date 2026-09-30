@@ -365,6 +365,8 @@ class FinalizeBatchDelete extends MemoryBatchDeleteEndpoint {
 }
 class FinalizeExport extends MemoryExportEndpoint {
   _meta = finalizeMeta;
+
+  protected override allowedIncludes = ['parent'];
 }
 class FinalizeBatchUpsert extends MemoryBatchUpsertEndpoint {
   _meta = finalizeMeta;

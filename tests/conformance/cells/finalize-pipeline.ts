@@ -9,9 +9,10 @@
  *   row — a server-only column (bucket key, password hash) that must never
  *   appear in a response, with or without a serializer.
  *
- * All must hold IDENTICALLY on create, read, list, batchCreate, and
- * batchDelete responses (batchDelete previously skipped the shared
- * finalize chain — audit finding 44).
+ * All must hold IDENTICALLY on every record-returning verb: the shared
+ * finalize chain (create, read, list, batchCreate, batchDelete, import,
+ * bulkPatch, version rollback, batchUpsert's shaping), plus the projection on
+ * the paths that skip it (export, version snapshots, `?include=` rows).
  */
 import { expect, test } from 'vitest';
 import {
@@ -120,7 +121,7 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
     );
   });
 
-  test('finalize projection: export, batchUpsert and ?include= never echo a column the schema leaves out', async () => {
+  test('finalize projection: export and batchUpsert never echo a column the schema leaves out', async () => {
     const { app } = ctx();
 
     const parent = await createRecord(app, '/finalize-items', {
@@ -147,7 +148,8 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
     expect(header).toContain('email');
     expect(header).not.toContain(serverOnlyField);
 
-    // batchUpsert runs its own serializer tail after early computed fields.
+    // batchUpsert adds computed fields early (its events carry them), then
+    // shapes its items through the rest of the chain.
     const upsert = await app.request(
       '/finalize-items/batch/upsert',
       jsonInit('POST', [
@@ -161,24 +163,43 @@ export function registerFinalizePipelineCells(descriptor: AdapterDescriptor, ctx
     }>(upsert);
     expect(upserted.result.items[0]!.data.name).toBe('Parent Renamed');
     expect(serverOnlyField in upserted.result.items[0]!.data).toBe(false);
-
-    if (!descriptor.capabilities.relationScoping) return;
-
-    // ?include= attaches related rows as stored; the relation's `schema` is
-    // what OpenAPI documents for them.
-    const child = await createRecord(app, '/finalize-items', {
-      name: 'Child',
-      email: 'projection-child@conformance.test',
-      role: 'user',
-      parentId: parent.id,
-    });
-    const read = await expectSuccess<ConformanceRecord & { parent: ConformanceRecord | null }>(
-      await app.request(`/finalize-items/${child.id}?include=parent`),
-      200,
-    );
-    expect(read.parent?.name).toBe('Parent Renamed');
-    expect(serverOnlyField in (read.parent as ConformanceRecord)).toBe(false);
   });
+
+  if (descriptor.capabilities.relationScoping) {
+    test('finalize projection: ?include= rows on read and export never echo a column the schema leaves out', async () => {
+      const { app } = ctx();
+      const parent = await createRecord(app, '/finalize-items', {
+        name: 'Parent',
+        email: 'include-parent@conformance.test',
+        role: 'user',
+      });
+      const child = await createRecord(app, '/finalize-items', {
+        name: 'Child',
+        email: 'include-child@conformance.test',
+        role: 'user',
+        parentId: parent.id,
+      });
+
+      // ?include= attaches related rows as stored; the relation's `schema` is
+      // what OpenAPI documents for them.
+      const read = await expectSuccess<ConformanceRecord & { parent: ConformanceRecord | null }>(
+        await app.request(`/finalize-items/${child.id}?include=parent`),
+        200,
+      );
+      expect(read.parent?.name).toBe('Parent');
+      expect(serverOnlyField in (read.parent as ConformanceRecord)).toBe(false);
+
+      // Export skips the finalize chain, so it projects included rows itself.
+      const exported = await expectSuccess<{
+        data: Array<ConformanceRecord & { parent?: ConformanceRecord | null }>;
+      }>(await app.request('/finalize-items/export?format=json&include=parent'), 200);
+      const exportedChild = exported.data.find((record) => record.id === child.id);
+      expect(exportedChild?.parent?.name).toBe('Parent');
+      expect(serverOnlyField in (exportedChild?.parent as ConformanceRecord)).toBe(false);
+    });
+  } else {
+    test.skip(`finalize projection: ?include= rows [skipped: ${descriptor.name} has no self-relation on its finalize model]`, () => {});
+  }
 
   test('finalize pipeline: import and bulkPatch responses run the same chain', async () => {
     const { app } = ctx();

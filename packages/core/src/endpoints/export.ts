@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { InferModelRow, ListFilters, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { type CsvGenerateOptions, escapeCsvValue, generateCsv } from '../utils/csv';
 import { ListEndpoint } from './list';
-import { pickFields } from './projection';
+import { projectRecord } from './projection';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 
 // ============================================================================
@@ -175,14 +175,18 @@ export abstract class ExportEndpoint<
   /**
    * Prepares records for export: keeps the response fields (a stored column
    * the schema leaves out is never exported, same as every other read) minus
-   * `excludedExportFields`.
+   * `excludedExportFields`, and projects `?include=` rows onto their
+   * relation's schema like the other reads do.
    */
   protected prepareRecordsForExport(
     records: InferModelRow<M['model']>[],
   ): Record<string, unknown>[] {
-    const fields = new Set(this.getResponseProjection().fields);
-    for (const excluded of this.excludedExportFields) fields.delete(excluded);
-    return records.map((record) => pickFields(record as Record<string, unknown>, fields));
+    const { fields, relations } = this.getResponseProjection();
+    const exported = new Set(fields);
+    for (const excluded of this.excludedExportFields) exported.delete(excluded);
+    const projection = { fields: exported, relations };
+    // Records are plain rows, so the projection always returns an object.
+    return records.map((record) => projectRecord(record, projection) as Record<string, unknown>);
   }
 
   /**

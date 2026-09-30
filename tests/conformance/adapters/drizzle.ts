@@ -405,6 +405,8 @@ class FinalizeBatchDelete extends DrizzleBatchDeleteEndpoint {
 class FinalizeExport extends DrizzleExportEndpoint {
   _meta = finalizeMeta;
   db = DB;
+
+  protected override allowedIncludes = ['parent'];
 }
 class FinalizeBatchUpsert extends DrizzleBatchUpsertEndpoint {
   _meta = finalizeMeta;
