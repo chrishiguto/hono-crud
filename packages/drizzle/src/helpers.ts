@@ -120,8 +120,9 @@ export interface Database<Row = unknown> {
  * Casts a database handle to the internal {@link Database} interface for method
  * calls, parametrized over the row type `Row` that queries resolve to. This is
  * the single sanctioned boundary `as`: all Drizzle databases expose these
- * methods at runtime, and the row type derives from the consumer's Zod schema
- * (`ModelObject<M['model']>`), never from a drizzle-orm type.
+ * methods at runtime, and the row type is the model's stored row
+ * (`InferModelRow<M['model']>`: the table's `$inferSelect` matched
+ * structurally), never an imported drizzle-orm type.
  */
 export function cast<Row = unknown>(instance: unknown): Database<Row> {
   return instance as Database<Row>;

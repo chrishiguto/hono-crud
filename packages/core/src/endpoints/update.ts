@@ -553,7 +553,6 @@ export abstract class UpdateEndpoint<
       );
     }
 
-    // computed fields → serializer → profile → transform
     const result = await this.finalizeRecord(obj);
 
     // Add ETag header on response

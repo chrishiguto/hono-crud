@@ -381,7 +381,6 @@ export abstract class CreateEndpoint<
       this.runAfterResponse(this.emitEvent('created', { recordId: parentId, data: row }));
     }
 
-    // computed fields → serializer → profile → transform
     const result = await this.finalizeRecord(row);
 
     // Invalidate this tenant's cached list/read entries (best-effort).

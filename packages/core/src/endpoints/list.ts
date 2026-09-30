@@ -380,7 +380,6 @@ export abstract class ListEndpoint<
 
     const items = await this.after(policyFiltered);
 
-    // computed fields → serializer → profile → transform → field selection
     const fieldSelection =
       this.fieldSelectionEnabled && filters.options.fields && filters.options.fields.length > 0
         ? { fields: filters.options.fields, isActive: true }

@@ -630,7 +630,6 @@ export abstract class UpsertEndpoint<
       );
     }
 
-    // computed fields → serializer → profile → transform
     const finalized = await this.finalizeRecord(obj);
 
     // Return with created flag and appropriate status code

@@ -482,9 +482,6 @@ export abstract class SearchEndpoint<
     // Call afterSearch hook
     const items = await this.afterSearch(searchResult.items);
 
-    // computed → serializer → profile → transform → field selection, applied to
-    // each result's `.item` payload. Profile + transform were previously skipped
-    // here — running them closes the serialization-profile leak.
     const fieldSelection =
       this.fieldSelectionEnabled && filters.options.fields && filters.options.fields.length > 0
         ? { fields: filters.options.fields, isActive: true }

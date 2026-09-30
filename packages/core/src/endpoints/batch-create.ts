@@ -260,7 +260,6 @@ export abstract class BatchCreateEndpoint<
     // Emit one `batch_created` event per created record (mirrors the audit fan-out).
     this.emitBatchEvents('batch_created', results);
 
-    // computed fields → serializer → profile → transform
     const transformed = await this.finalizeArray(results);
 
     const response = {

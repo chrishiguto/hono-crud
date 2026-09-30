@@ -229,7 +229,6 @@ export abstract class CloneEndpoint<
       this.runAfterResponse(this.emitEvent('cloned', { recordId: clonedId, data: obj }));
     }
 
-    // computed fields → serializer → profile → transform
     const result = await this.finalizeRecord(obj);
 
     // Mutation changes which rows a cached list/read would return.

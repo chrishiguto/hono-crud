@@ -291,7 +291,6 @@ export abstract class ReadEndpoint<
 
     obj = await this.after(obj);
 
-    // computed fields → serializer → profile → transform → field selection
     const result = await this.finalizeRecord(obj, fieldSelection);
 
     // Populate the response cache (config-driven) before the ETag branch so the
