@@ -572,6 +572,23 @@ app.get('/redoc', redocUI({ specUrl: '/openapi.json' }));
 app.get('/reference', scalarUI({ specUrl: '/openapi.json' }));
 ```
 
+### Operation IDs
+
+Every `registerCrud` route gets a default `operationId`, so clients generated from the spec get readable function names instead of method-plus-path ones (`getApiNotesByIdComments`). The id is `<verb><Resource>`, built from the endpoint slot and the path you registered:
+
+| Registration | Operation IDs |
+|---|---|
+| `registerCrud(app, '/comments', …)` | `createComment`, `listComments`, `getComment`, `updateComment`, `deleteComment` |
+| `registerCrud(app, '/notes/:noteId/comments', { list })` | `listNoteComments` |
+| `registerCrud(app, '/admin/comments', { list })` | `listAdminComments` |
+
+`read` is spelled `get`; every other slot keeps its own name (`batchCreateComments`, `searchComments`, `restoreComment`, `listCommentVersions`, ...). A path segment followed by a param is singular, the last segment is singular for item verbs and plural for collection verbs, and a path with no static segment falls back to the model's `tableName`. The singular rules are deliberately small and frozen (`categories` → `category`, `addresses` → `address`, `people` stays `people`), because changing them would rename generated client functions.
+
+- An explicit `schema.operationId` on the endpoint always wins — use it for irregular names.
+- Routes registered directly (`app.get(path, Endpoint)`) get no default.
+- Ids are unique per `fromHono` app, and a generated id that duplicates another fails at setup. Mounting the same registrations under two prefixes (`/v1`, `/v2`) still duplicates them, since the prefix isn't visible at registration.
+- `fromHono(app, { operationIds: false })` turns the defaults off.
+
 ## Examples
 
 See the [examples/](./examples) directory for complete working applications:
