@@ -77,6 +77,15 @@ export function registerPaginationCells(_descriptor: AdapterDescriptor, ctx: Ctx
     expect(list.result_info).toMatchObject({ page: 1, per_page: 20, total_count: 5 });
   });
 
+  test('offset pagination: a defaultPerPage above maxPerPage defaults to the ceiling', async () => {
+    const { app } = ctx();
+    await seedFilterRows(app, '/capped-items');
+
+    const list = await expectList(await app.request('/capped-items'));
+    expect(list.result).toHaveLength(2);
+    expect(list.result_info).toMatchObject({ page: 1, per_page: 2, total_count: 5 });
+  });
+
   test('offset pagination: page/per_page outside the documented bounds are refused, never clamped', async () => {
     const { app } = ctx();
 

@@ -19,6 +19,10 @@ describe('parseListFilters paging', () => {
     expect(parseListFilters({}, { defaultPerPage: 5 }).options.per_page).toBe(5);
   });
 
+  it('caps the per_page default at maxPerPage', () => {
+    expect(parseListFilters({}, { maxPerPage: 10 }).options.per_page).toBe(10);
+  });
+
   it('accepts already-validated numbers unchanged', () => {
     expect(parseListFilters({ page: 2, per_page: 50 }, {}).options).toMatchObject({
       page: 2,
