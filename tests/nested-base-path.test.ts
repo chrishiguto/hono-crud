@@ -100,6 +100,14 @@ describe('base-path params are declared', () => {
     ]);
   });
 
+  it('templates a Hono-syntax toOpenApiPaths base path, matching the declared params', () => {
+    const paths = toOpenApiPaths(commentEndpoints(), { basePath: '/notes/:noteId/comments' });
+    expect(pathParams({ paths } as Doc)).toMatchObject({
+      'GET /notes/{noteId}/comments': ['noteId'],
+      'GET /notes/{noteId}/comments/{id}': ['id', 'noteId'],
+    });
+  });
+
   it('reads the child id on a nested item route', async () => {
     const app = fromHono(new OpenAPIHono());
     registerCrud(app, '/notes/:noteId/comments', commentEndpoints());
