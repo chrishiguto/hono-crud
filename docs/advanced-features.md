@@ -1217,6 +1217,10 @@ reach the database: numbers, booleans, and dates are converted, and a string
 `?status=publised` for `z.enum(['draft', 'published'])`, returns
 `400 VALIDATION_ERROR` instead of an empty page.
 
+The OpenAPI document types the params the same way: `?status=` and
+`?status[ne]=` list the enum members (so a generated client types them as the
+union), while `in`, `nin`, `between`, `like`, and `ilike` params stay strings.
+
 ---
 
 ## Sorting & Pagination
