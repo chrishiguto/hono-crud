@@ -6,6 +6,7 @@ import { MemoryAdapters } from '@hono-crud/memory';
  */
 import { OpenAPIHono } from '@hono/zod-openapi';
 import {
+  type OperationIdContext,
   type RouterOptions,
   buildPerTenantOpenApi,
   defineEndpoints,
@@ -145,6 +146,64 @@ describe('default operationId', () => {
     const doc = (await buildPerTenantOpenApi(app, { tenantId: 't1' })) as Doc;
     expect(doc.paths?.['/comments/{id}']?.get?.operationId).toBe('getComment');
     expect(doc.paths?.['/comments']?.get?.operationId).toBe('listComments');
+  });
+});
+
+describe('operationIds naming function', () => {
+  it('receives the route context and names the operation', () => {
+    const seen: OperationIdContext[] = [];
+    const app = newApp({
+      operationIds: (ctx) => {
+        seen.push(ctx);
+        return ctx.defaultId && `v2${ctx.defaultId[0].toUpperCase()}${ctx.defaultId.slice(1)}`;
+      },
+    });
+    registerCrud(app, '/notes/:noteId/comments', commentEndpoints());
+    expect(operationIds(app)['GET /notes/{noteId}/comments/{id}']).toBe('v2GetNoteComment');
+    expect(seen.find((ctx) => ctx.operation === 'read')).toEqual({
+      operation: 'read',
+      method: 'get',
+      path: '/notes/:noteId/comments/:id',
+      basePath: '/notes/:noteId/comments',
+      model: CommentModel,
+      defaultId: 'getNoteComment',
+    });
+  });
+
+  it('omits the id when the function returns undefined', () => {
+    const app = newApp({
+      operationIds: ({ operation }) => (operation === 'list' ? undefined : operation),
+    });
+    registerCrud(app, '/comments', {
+      list: commentEndpoints().list,
+      read: commentEndpoints().read,
+    });
+    expect(operationIds(app)).toEqual({ 'GET /comments': undefined, 'GET /comments/{id}': 'read' });
+  });
+
+  it('still loses to an explicit schema.operationId', () => {
+    const app = newApp({ operationIds: () => 'fromStrategy' });
+    const endpoints = defineEndpoints(
+      { meta: commentMeta, list: { openapi: { operationId: 'explicit' } } },
+      MemoryAdapters,
+    );
+    registerCrud(app, '/comments', endpoints);
+    expect(operationIds(app)).toEqual({ 'GET /comments': 'explicit' });
+  });
+
+  it('fails at setup when the function returns a duplicate', () => {
+    const app = newApp({ operationIds: () => 'same' });
+    expect(() => registerCrud(app, '/comments', commentEndpoints())).toThrow(
+      /operationId "same" is used by both POST \/comments and GET \/comments/,
+    );
+  });
+
+  it('applies to toOpenApiPaths too', () => {
+    const paths = toOpenApiPaths(commentEndpoints(), {
+      basePath: '/comments',
+      operationIds: ({ operation, method }) => `${method}_${operation}`,
+    });
+    expect((paths['/comments']?.get as Operation).operationId).toBe('get_list');
   });
 });
 
