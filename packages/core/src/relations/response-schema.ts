@@ -12,7 +12,8 @@ import type { MetaInput, RelationConfig } from '../core/types';
  * `schema` (the related model's shape). The field is always OPTIONAL, since the
  * relation is present only when explicitly requested via `?include=`:
  *   - `hasMany`            → `z.array(relationSchema).optional()`
- *   - `belongsTo` / `hasOne` → `z.union([relationSchema, z.null()]).optional()`
+ *   - `belongsTo` / `hasOne` → `relationSchema.nullable().optional()`, or
+ *     `z.union([relationSchema, z.null()]).optional()` for a named schema
  *
  * Two emission constraints shape this (zod-to-openapi 8.x):
  *   - A named item schema (`.meta({ id })`) keeps its component `$ref` where it
@@ -21,9 +22,8 @@ import type { MetaInput, RelationConfig } from '../core/types';
  *     `allOf: [{ $ref }, { relations }]`. A plain `.extend()` drops the id and
  *     inlines the row. Not `z.intersection`: Zod's JSON Schema output (MCP
  *     `outputSchema`) closes both allOf branches, rejecting every row.
- *   - A to-one relation is a union with null, not `.nullable()`: nullable over a
- *     named schema can mark the shared component itself nullable when it is the
- *     schema's first use (asteasolutions/zod-to-openapi#258).
+ *   - A to-one relation over a named schema is a union with null, not
+ *     `.nullable()` (see {@link nullableRelation}).
  *
  * No-op (returns `itemSchema` unchanged) when there are no allowed includes or no
  * included relation declares a `schema`.
@@ -45,11 +45,24 @@ export function withIncludableRelations(
     extension[name] =
       relation.type === 'hasMany'
         ? z.array(relationSchema).optional()
-        : z.union([relationSchema, z.null()]).optional();
+        : nullableRelation(relationSchema).optional();
   }
   if (Object.keys(extension).length === 0) return itemSchema;
 
   return extendableBase(itemSchema).extend(extension);
+}
+
+/**
+ * A to-one relation, null when the related row is missing. `.nullable()` over a
+ * named schema (`.meta({ id })`) can mark the shared component itself nullable
+ * when it is the schema's first use (asteasolutions/zod-to-openapi#258), so a
+ * named schema takes a union with null instead. Only a named one: the 3.0
+ * generator emits the union's null branch as a bare `{ nullable: true }`, which
+ * typed-client generators read as `unknown`, while `.nullable()` over an inline
+ * object stays an exact `{ type: 'object', nullable: true }`.
+ */
+function nullableRelation(schema: ZodObject<ZodRawShape>): z.ZodType {
+  return typeof schema.meta()?.id === 'string' ? z.union([schema, z.null()]) : schema.nullable();
 }
 
 /**

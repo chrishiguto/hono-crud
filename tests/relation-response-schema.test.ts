@@ -179,6 +179,25 @@ describe('withIncludableRelations OpenAPI emission', () => {
       expect.objectContaining({ properties: { post: expect.any(Object) } }),
     ]);
 
+  // One response schema through the 3.0 or 3.1 generator.
+  const emitItem = (item: z.ZodType, openapi: '3.0.0' | '3.1.0' = '3.1.0'): Schema => {
+    const app = new OpenAPIHono();
+    app.openAPIRegistry.registerPath({
+      method: 'get',
+      path: '/item',
+      responses: {
+        200: { description: 'item', content: { 'application/json': { schema: item } } },
+      },
+    });
+    const config = { openapi, info: { title: 't', version: '1' } };
+    const doc =
+      openapi === '3.0.0' ? app.getOpenAPIDocument(config) : app.getOpenAPI31Document(config);
+    const responses = doc.paths?.['/item']?.get?.responses as Record<string, Schema>;
+    return (responses['200'] as { content: { 'application/json': { schema: Schema } } }).content[
+      'application/json'
+    ].schema;
+  };
+
   for (const openapi of ['3.0.0', '3.1.0'] as const) {
     it(`keeps the item $ref on list, read, search and export (${openapi})`, async () => {
       const doc = await emit(openapi);
@@ -214,6 +233,18 @@ describe('withIncludableRelations OpenAPI emission', () => {
         ],
       });
     });
+
+    // Only a named schema needs the union: the 3.0 generator's bare
+    // `{ nullable: true }` null branch types as `unknown` in generated clients.
+    it(`keeps an unnamed to-one relation an exact nullable object (${openapi})`, () => {
+      const meta = metaWith({
+        post: { type: 'belongsTo', model: 'post', foreignKey: 'postId', schema: postSchema },
+      });
+      const item = emitItem(withIncludableRelations(itemSchema, meta, ['post']), openapi);
+      expect((item.properties as Record<string, Schema>).post).toMatchObject(
+        openapi === '3.0.0' ? { type: 'object', nullable: true } : { type: ['object', 'null'] },
+      );
+    });
   }
 
   it('stays one flat object in Zod JSON Schema (MCP outputSchema)', () => {
@@ -228,21 +259,6 @@ describe('withIncludableRelations OpenAPI emission', () => {
   });
 
   // Rows the allOf form cannot carry soundly keep the pre-#150 inline shape.
-  const emitItem = (item: z.ZodType): Schema => {
-    const app = new OpenAPIHono();
-    app.openAPIRegistry.registerPath({
-      method: 'get',
-      path: '/item',
-      responses: {
-        200: { description: 'item', content: { 'application/json': { schema: item } } },
-      },
-    });
-    const doc = app.getOpenAPI31Document({ openapi: '3.1.0', info: { title: 't', version: '1' } });
-    const responses = doc.paths['/item']?.get?.responses as Record<string, Schema>;
-    return (responses['200'] as { content: { 'application/json': { schema: Schema } } }).content[
-      'application/json'
-    ].schema;
-  };
   const inlinesWithPost = (item: z.ZodObject) => {
     const schema = emitItem(withIncludableRelations(item, commentMeta, ['post']));
     expect(schema).not.toHaveProperty('allOf');
