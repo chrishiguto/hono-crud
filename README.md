@@ -588,6 +588,7 @@ Every `registerCrud` route gets a default `operationId`, so clients generated fr
 - Routes registered directly (`app.get(path, Endpoint)`) get no default.
 - Ids are unique per `fromHono` app, and a generated id that duplicates another fails at setup. Mounting the same registrations under two prefixes (`/v1`, `/v2`) still duplicates them, since the prefix isn't visible at registration.
 - `fromHono(app, { operationIds: false })` turns the defaults off.
+- `toOpenApiPaths(endpoints, { basePath })` emits the same ids as `registerCrud` at that path; without a `basePath` it names the resource from `tableName`. It takes the same `operationIds` option.
 
 ## Examples
 

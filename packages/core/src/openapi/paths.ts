@@ -30,7 +30,8 @@ import { z } from 'zod';
 
 import type { GeneratedEndpoints } from '../config/index';
 import { CRUD_ROUTES, type CrudEndpointName } from '../core/crud-routes';
-import { resolveInstanceSchemaTags } from '../core/generate-endpoint-class';
+import { instanceModel, resolveInstanceSchemaTags } from '../core/generate-endpoint-class';
+import { type OperationIdsOption, applyDefaultOperationId } from '../core/operation-id';
 import type { OpenAPIRouteSchema } from '../core/types';
 import { toOpenApiPath } from './utils';
 
@@ -61,6 +62,13 @@ export interface ToOpenApiPathsOptions {
    * per-endpoint tags are preserved as-is.
    */
   tag?: string;
+  /**
+   * Default `operationId` generation — the same ids `registerCrud` emits for
+   * a resource registered at `basePath` (`listUsers`, `getUser`, ...). With
+   * no `basePath`, the resource name comes from the model's `tableName`.
+   * `false` emits no default. An explicit `openapi.operationId` always wins.
+   */
+  operationIds?: OperationIdsOption;
 }
 
 /**
@@ -135,7 +143,12 @@ export function toOpenApiPaths(
     // default tags into the raw `.schema` field, so reading `getSchema()`
     // directly would drop them. An explicit per-endpoint tag still wins.
     const instance = new EndpointClass();
-    const schema = resolveInstanceSchemaTags(instance);
+    const schema = applyDefaultOperationId(
+      resolveInstanceSchemaTags(instance),
+      { operation: name, basePath },
+      instanceModel(instance),
+      options.operationIds,
+    );
 
     const effectiveSchema: OpenAPIRouteSchema =
       tagOverride !== undefined ? { ...schema, tags: [tagOverride] } : schema;

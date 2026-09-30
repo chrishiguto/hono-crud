@@ -99,7 +99,8 @@ function pascal(segment: string): string {
     .join('');
 }
 
-const isParam = (segment: string): boolean => segment.startsWith(':');
+/** A Hono (`:id`) or OpenAPI (`{id}`) path param. */
+const isParam = (segment: string): boolean => segment.startsWith(':') || /^\{.+\}$/.test(segment);
 
 /**
  * The default `operationId` for a `registerCrud` slot, or `undefined` when
