@@ -2,6 +2,7 @@
  * Parse aggregation query parameters into structured `AggregateOptions`.
  */
 
+import { InputValidationException } from './exceptions';
 import {
   AGGREGATE_OPERATIONS,
   type AggregateField,
@@ -37,10 +38,36 @@ export function parseAggregateField(value: string): AggregateField | null {
   };
 }
 
+/** Soft-delete settings `parseAggregateQuery` needs from the endpoint's model. */
+export interface AggregateQueryParseOptions {
+  /** Query param that asks for soft-deleted rows. @default 'withDeleted' */
+  softDeleteQueryParam?: string;
+  /** Whether clients may ask for soft-deleted rows (`softDelete.allowQueryDeleted`). @default true */
+  allowQueryDeleted?: boolean;
+}
+
+/**
+ * Parse a `limit` / `offset` query value. The query schema declares them as
+ * strings: a `z.coerce.number()` there turned them into numbers before this
+ * parser ran, so they were silently dropped, and `?limit=` coerced to 0.
+ */
+function parseNonNegativeInteger(name: string, value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  const raw = String(value).trim();
+  if (!/^\d+$/.test(raw)) {
+    throw new InputValidationException(`'${name}' expects a non-negative integer, got '${raw}'`);
+  }
+  return Number(raw);
+}
+
 /**
  * Parse aggregations from query parameters.
  */
-export function parseAggregateQuery(query: Record<string, unknown>): AggregateOptions {
+export function parseAggregateQuery(
+  query: Record<string, unknown>,
+  options: AggregateQueryParseOptions = {},
+): AggregateOptions {
+  const { softDeleteQueryParam = 'withDeleted', allowQueryDeleted = true } = options;
   const aggregations: AggregateField[] = [];
   const filters: Record<string, unknown> = {};
 
@@ -88,8 +115,13 @@ export function parseAggregateQuery(query: Record<string, unknown>): AggregateOp
   const orderDirection = query.orderDirection === 'desc' ? 'desc' : 'asc';
 
   // Parse pagination
-  const limit = typeof query.limit === 'string' ? Number.parseInt(query.limit, 10) : undefined;
-  const offset = typeof query.offset === 'string' ? Number.parseInt(query.offset, 10) : undefined;
+  const limit = parseNonNegativeInteger('limit', query.limit);
+  const offset = parseNonNegativeInteger('offset', query.offset);
+
+  // The soft-delete param is always reserved (never a filter); it only takes
+  // effect when the model lets clients ask for deleted rows.
+  const withDeleted =
+    allowQueryDeleted && String(query[softDeleteQueryParam]).toLowerCase() === 'true';
 
   // Collect remaining params as filters
   const reservedParams = [
@@ -99,6 +131,7 @@ export function parseAggregateQuery(query: Record<string, unknown>): AggregateOp
     'orderDirection',
     'limit',
     'offset',
+    softDeleteQueryParam,
   ];
   for (const [key, value] of Object.entries(query)) {
     if (!reservedParams.includes(key) && !key.startsWith('having[')) {
@@ -115,5 +148,6 @@ export function parseAggregateQuery(query: Record<string, unknown>): AggregateOp
     orderDirection,
     limit,
     offset,
+    ...(withDeleted ? { withDeleted } : {}),
   };
 }
