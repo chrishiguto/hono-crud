@@ -1,7 +1,7 @@
 import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { getManagedInputExclusions, rethrowAsConstraintError } from '../core/managed-fields';
-import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { HookMode, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';
@@ -154,10 +154,10 @@ export abstract class BatchCreateEndpoint<
    * Override to transform result before returning.
    */
   async after(
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     _index: number,
     _tx?: unknown,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -191,7 +191,7 @@ export abstract class BatchCreateEndpoint<
   abstract batchCreate(
     items: Partial<ModelObject<M['model']>>[],
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>[]>;
+  ): Promise<InferModelRow<M['model']>[]>;
 
   /**
    * Main handler for the batch create operation.
@@ -233,10 +233,10 @@ export abstract class BatchCreateEndpoint<
     // Decrypt each persisted record before the after-hook / response (mirrors list).
     const decrypted = (await Promise.all(
       created.map((record) => this.decryptOnRead(record as Record<string, unknown>)),
-    )) as ModelObject<M['model']>[];
+    )) as InferModelRow<M['model']>[];
 
     // Apply after hooks
-    const results: ModelObject<M['model']>[] = [];
+    const results: InferModelRow<M['model']>[] = [];
     for (let i = 0; i < decrypted.length; i++) {
       try {
         if (this.afterHookMode === 'fire-and-forget') {
@@ -260,7 +260,6 @@ export abstract class BatchCreateEndpoint<
     // Emit one `batch_created` event per created record (mirrors the audit fan-out).
     this.emitBatchEvents('batch_created', results);
 
-    // computed fields → serializer → profile → transform
     const transformed = await this.finalizeArray(results);
 
     const response = {

@@ -25,9 +25,9 @@ import { inlineSingular, levenshteinDistance } from './pluralize-util';
 
 /**
  * Structural shape of a Prisma model delegate, generic over the row type `Row`
- * a query resolves to (derived from the consumer's Zod schema as
- * `ModelObject<M['model']>`). Read/write operations return `Row`, so endpoint
- * results come back typed without per-call `as ModelObject` casts. Defaults to
+ * a query resolves to (the model's stored row, `InferModelRow<M['model']>`,
+ * which for Prisma is the Zod schema type). Read/write operations return `Row`,
+ * so endpoint results come back typed without per-call casts. Defaults to
  * `Record<string, unknown>` for dynamic/relation access where the row type is
  * not statically known.
  */

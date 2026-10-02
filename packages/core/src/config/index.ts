@@ -46,6 +46,7 @@ import type {
   FieldsOf,
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationNamesOf,
@@ -113,9 +114,9 @@ interface CreateHooks<M extends MetaInput> extends HookConfig {
     ctx?: HookContext,
   ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
   after?: (
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     ctx?: HookContext,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -212,8 +213,8 @@ interface FieldSelectionConfig {
  */
 interface ListHooks<M extends MetaInput> {
   after?: (
-    items: ModelObject<M['model']>[],
-  ) => Promise<ModelObject<M['model']>[]> | ModelObject<M['model']>[];
+    items: InferModelRow<M['model']>[],
+  ) => Promise<InferModelRow<M['model']>[]> | InferModelRow<M['model']>[];
   transform?: (item: ModelObject<M['model']>) => unknown;
 }
 
@@ -282,8 +283,8 @@ export interface ListEndpointConfig<M extends MetaInput, E extends Env = Env>
  */
 interface ReadHooks<M extends MetaInput> {
   after?: (
-    data: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    data: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
   transform?: (item: ModelObject<M['model']>) => unknown;
 }
 
@@ -322,7 +323,7 @@ interface UpdateHooks<M extends MetaInput> extends HookConfig {
     ctx?: HookContext,
   ) => Promise<Partial<ModelObject<M['model']>>> | Partial<ModelObject<M['model']>>;
   /** The exported `AfterUpdateHook` alias: `(prior, current, ctx: HookContext)`. */
-  after?: AfterUpdateHook<ModelObject<M['model']>>;
+  after?: AfterUpdateHook<InferModelRow<M['model']>>;
   transform?: (item: ModelObject<M['model']>) => unknown;
 }
 
@@ -362,7 +363,7 @@ export interface UpdateEndpointConfig<M extends MetaInput, E extends Env = Env>
 interface DeleteHooks<M extends MetaInput> extends HookConfig {
   before?: (lookupValue: string, ctx?: HookContext) => Promise<void> | void;
   /** The exported `AfterDeleteHook` alias: `(prior, ctx: HookContext)`. */
-  after?: AfterDeleteHook<ModelObject<M['model']>>;
+  after?: AfterDeleteHook<InferModelRow<M['model']>>;
 }
 
 /**
@@ -393,10 +394,10 @@ export interface DeleteEndpointConfig<M extends MetaInput, E extends Env = Env>
  */
 interface SearchHooks<M extends MetaInput> {
   after?: (
-    results: SearchResultItem<ModelObject<M['model']>>[],
+    results: SearchResultItem<InferModelRow<M['model']>>[],
   ) =>
-    | Promise<SearchResultItem<ModelObject<M['model']>>[]>
-    | SearchResultItem<ModelObject<M['model']>>[];
+    | Promise<SearchResultItem<InferModelRow<M['model']>>[]>
+    | SearchResultItem<InferModelRow<M['model']>>[];
 }
 
 /**
@@ -441,8 +442,8 @@ export interface AggregateEndpointConfig<M extends MetaInput, E extends Env = En
 interface RestoreHooks<M extends MetaInput> extends HookConfig {
   before?: (lookupValue: string) => Promise<void> | void;
   after?: (
-    restoredItem: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    restoredItem: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -462,9 +463,9 @@ interface BatchCreateHooks<M extends MetaInput> extends HookConfig {
     index: number,
   ) => Promise<Partial<ModelObject<M['model']>>> | Partial<ModelObject<M['model']>>;
   after?: (
-    item: ModelObject<M['model']>,
+    item: InferModelRow<M['model']>,
     index: number,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -488,8 +489,8 @@ interface BatchUpdateHooks<M extends MetaInput> extends HookConfig {
     data: Partial<ModelObject<M['model']>>,
   ) => Promise<Partial<ModelObject<M['model']>>> | Partial<ModelObject<M['model']>>;
   after?: (
-    item: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    item: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -508,8 +509,8 @@ export interface BatchUpdateEndpointConfig<M extends MetaInput, E extends Env = 
 interface BatchDeleteHooks<M extends MetaInput> extends HookConfig {
   before?: (id: string) => Promise<void> | void;
   after?: (
-    item: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    item: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -528,8 +529,8 @@ export interface BatchDeleteEndpointConfig<M extends MetaInput, E extends Env = 
 interface BatchRestoreHooks<M extends MetaInput> extends HookConfig {
   before?: (id: string) => Promise<void> | void;
   after?: (
-    item: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    item: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -551,10 +552,10 @@ interface BatchUpsertHooks<M extends MetaInput> extends HookConfig {
     items: Partial<ModelObject<M['model']>>[],
   ) => Promise<Partial<ModelObject<M['model']>>[]> | Partial<ModelObject<M['model']>>[];
   after?: (
-    result: BatchUpsertResult<ModelObject<M['model']>>,
+    result: BatchUpsertResult<InferModelRow<M['model']>>,
   ) =>
-    | Promise<BatchUpsertResult<ModelObject<M['model']>>>
-    | BatchUpsertResult<ModelObject<M['model']>>;
+    | Promise<BatchUpsertResult<InferModelRow<M['model']>>>
+    | BatchUpsertResult<InferModelRow<M['model']>>;
 }
 
 /**
@@ -600,10 +601,12 @@ interface ImportHooks<M extends MetaInput> {
     tx?: unknown,
   ) => Promise<Partial<ModelObject<M['model']>>> | Partial<ModelObject<M['model']>>;
   after?: (
-    result: ImportRowResult<ModelObject<M['model']>>,
+    result: ImportRowResult<InferModelRow<M['model']>>,
     rowNumber: number,
     mode: ImportMode,
-  ) => Promise<ImportRowResult<ModelObject<M['model']>>> | ImportRowResult<ModelObject<M['model']>>;
+  ) =>
+    | Promise<ImportRowResult<InferModelRow<M['model']>>>
+    | ImportRowResult<InferModelRow<M['model']>>;
 }
 
 /**
@@ -626,9 +629,9 @@ interface UpsertHooks<M extends MetaInput> extends HookConfig {
     isCreate: boolean,
   ) => Promise<Partial<ModelObject<M['model']>>> | Partial<ModelObject<M['model']>>;
   after?: (
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     created: boolean,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**
@@ -649,11 +652,11 @@ export interface UpsertEndpointConfig<M extends MetaInput, E extends Env = Env>
  */
 interface CloneHooks<M extends MetaInput> {
   before?: (
-    data: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    data: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
   after?: (
-    cloned: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    cloned: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
 }
 
 /**

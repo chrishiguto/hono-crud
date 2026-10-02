@@ -151,6 +151,15 @@ export interface ConformanceCapabilities {
    * its ciphertext-at-rest assertion still runs everywhere.
    */
   bulkPatchReturnsRecords: boolean;
+  /**
+   * Whether this leg's finalize model (`/finalize-items`) is versioned and
+   * mounts `update` plus the four version verbs, so the finalize cell can
+   * assert that version history, version read, compare and rollback never echo
+   * a stored column the schema leaves out. True on memory and drizzle. False on
+   * prisma: it reuses the fixed examples `users` schema, which has no version
+   * column; the skip is named.
+   */
+  versionHistory: boolean;
 }
 
 /** A single audit-store entry as the conformance suite inspects it. */

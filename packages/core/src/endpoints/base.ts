@@ -24,7 +24,7 @@ import {
   invalidateEndpointCache,
   warnCacheSkippedForPolicy,
 } from '../core/cache';
-import { applyComputedFields, applyComputedFieldsToArray } from '../core/computed-fields';
+import { applyComputedFields } from '../core/computed-fields';
 import { CONTEXT_KEYS } from '../core/context-keys';
 import { ApiException, ForbiddenException, InputValidationException } from '../core/exceptions';
 import {
@@ -43,6 +43,7 @@ import {
   type FilterCondition,
   type HookContext,
   type HookMode,
+  type InferModelRow,
   type ListFilters,
   type MetaInput,
   type ModelPolicies,
@@ -60,16 +61,12 @@ import { decryptFields, encryptFields } from '../encryption/crypto';
 import { type CrudEventEmitter, resolveEventEmitter } from '../events/emitter';
 import type { CrudEventType } from '../events/types';
 import { extractTenantId, getMultiTenantConfig } from '../multi-tenant/config';
-import { applyProfile, applyProfileToArray } from '../serialization/serialize';
+import { applyProfile } from '../serialization/serialize';
 import { getContextVar, setContextVar } from '../utils/context';
 import { type VersionManager, createVersionManager } from '../versioning';
 import { getVersioningConfig } from '../versioning/config';
-import {
-  type FieldSelection,
-  type ModelObject,
-  applyFieldSelection,
-  applyFieldSelectionToArray,
-} from './types';
+import { type ResponseProjection, projectRecord } from './projection';
+import { type FieldSelection, applyFieldSelection } from './types';
 
 /**
  * Per-request memoization key for `Model.resolveSchema(ctx)` results.
@@ -87,11 +84,11 @@ const RESOLVED_SCHEMA_KEY_PREFIX = '__honoCrudResolvedSchema:';
 type SchemaOf<M extends MetaInput> = M['model']['schema'];
 
 /**
- * Inferred row type for a `MetaInput`'s model schema (i.e. `z.infer<...>`).
- * Used to type `policies` callbacks and other row-shaped helpers without
- * collapsing to `unknown`.
+ * The stored row of a `MetaInput`'s model (see `InferModelRow`): what the
+ * adapter read, which `policies` callbacks, `after` hooks and the serializer
+ * receive. Can be wider than the schema.
  */
-type RowOf<M extends MetaInput> = z.infer<SchemaOf<M>>;
+type Row<M extends MetaInput> = InferModelRow<M['model']>;
 
 /**
  * Type predicate: does `o` expose a `getBodySchema()` method? Endpoints
@@ -572,17 +569,6 @@ export abstract class CrudEndpoint<
     return profile ? applyProfile(record, profile) : record;
   }
 
-  /**
-   * Apply the model's default serialization profile to an array of records.
-   * Returns the array unchanged when no profile is configured.
-   */
-  protected applyProfileToArray<T extends Record<string, unknown>>(
-    records: T[],
-  ): Record<string, unknown>[] {
-    const profile = this._meta.model.serializationProfile;
-    return profile ? applyProfileToArray(records, profile) : records;
-  }
-
   // ============================================================================
   // Read-shaping pipeline
   // ============================================================================
@@ -590,59 +576,84 @@ export abstract class CrudEndpoint<
   /**
    * Per-record output transform. Default is identity; concrete endpoints (and
    * the generated config/builder subclasses) override it. Declared here so the
-   * shared `finalizeRecord` / `finalizeArray` tail can call it polymorphically.
+   * shared `finalizeRecord` / `finalizeArray` chain can call it polymorphically.
+   *
+   * Runs after the serializer, the projection and the serialization profile,
+   * so it receives the public shape (the verbs type it as `ModelObject`). A
+   * serializer that returns a non-object value reaches it unchanged.
    */
   protected transform(item: unknown): unknown {
     return item;
   }
 
   /**
-   * Deterministic read-shaping tail shared by every record-returning verb:
-   * `computed fields → serializer → serialization profile → transform →
-   * field selection`. Each step runs only when the model/endpoint configured
-   * it. This is the single source of truth for the chain that was previously
-   * copy-pasted across ~14 endpoints — where omitting `applyProfile` silently
-   * leaked fields the profile was meant to strip.
+   * Deterministic read-shaping chain shared by every record-returning verb:
+   * `computed fields → serializer → projection → serialization profile →
+   * transform → field selection`. Each optional step runs only when the
+   * model/endpoint configured it; the projection always runs. Every verb goes
+   * through this one chain so none can skip a step — a verb that omits
+   * `applyProfile` silently leaks the fields the profile is meant to strip.
+   *
+   * The projection keeps only {@link getResponseProjection}: the row can be wider
+   * than the schema (a bucket key, a password hash, the text behind a JSON
+   * column), and the schema is what OpenAPI documents, so a column the schema
+   * leaves out never reaches the client — even when a serializer spreads the
+   * row. `transform` therefore receives the public shape.
    *
    * `decrypt`, policy reads, and the user `after` hook stay in each verb's
-   * `handle()` — they aren't uniform across verbs and run before this tail.
+   * `handle()` — they aren't uniform across verbs and run before this chain.
    */
   protected async finalizeRecord(
-    record: ModelObject<M['model']>,
+    record: Row<M>,
     fieldSelection?: FieldSelection,
   ): Promise<unknown> {
-    const model = this._meta.model;
-    let obj: Record<string, unknown> = record as Record<string, unknown>;
-    if (model.computedFields) {
-      obj = await applyComputedFields(obj, model.computedFields);
-    }
-    const serialized = model.serializer ? model.serializer(obj as ModelObject<M['model']>) : obj;
-    const profiled = this.applyProfile(serialized as Record<string, unknown>);
-    const transformed = this.transform(profiled as ModelObject<M['model']>);
-    if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
-      return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
-    }
-    return transformed;
+    const withComputed = await this.withComputedFields(record);
+    return this.shape(withComputed, this.getResponseProjection(), fieldSelection);
   }
 
   /** Array variant of {@link finalizeRecord}. Same ordered chain, per element. */
   protected async finalizeArray(
-    records: ModelObject<M['model']>[],
+    records: Row<M>[],
     fieldSelection?: FieldSelection,
   ): Promise<unknown[]> {
-    const model = this._meta.model;
-    let items: Record<string, unknown>[] = records as Record<string, unknown>[];
-    if (model.computedFields) {
-      items = await applyComputedFieldsToArray(items, model.computedFields);
-    }
-    const serializer = model.serializer;
-    const serialized = serializer
-      ? items.map((i) => serializer(i as ModelObject<M['model']>))
-      : items;
-    const profiled = this.applyProfileToArray(serialized as Record<string, unknown>[]);
-    const transformed = profiled.map((i) => this.transform(i as ModelObject<M['model']>));
+    const withComputed = await Promise.all(records.map((r) => this.withComputedFields(r)));
+    return this.shapeArray(withComputed, fieldSelection);
+  }
+
+  /**
+   * First step of the finalize chain: the model's computed fields added onto
+   * the row (the row itself when none are configured).
+   */
+  protected async withComputedFields(record: Row<M>): Promise<Row<M>> {
+    const computedFields = this._meta.model.computedFields;
+    if (!computedFields) return record;
+    return (await applyComputedFields(record as Record<string, unknown>, computedFields)) as Row<M>;
+  }
+
+  /**
+   * The finalize chain after computed fields, for rows that already carry
+   * them — batch upsert adds them early so its events see them. Every other
+   * verb calls {@link finalizeArray}.
+   */
+  protected shapeArray(records: Row<M>[], fieldSelection?: FieldSelection): unknown[] {
+    const projection = this.getResponseProjection();
+    return records.map((record) => this.shape(record, projection, fieldSelection));
+  }
+
+  /** `serializer → projection → profile → transform → field selection` on one row. */
+  private shape(
+    record: Row<M>,
+    projection: ResponseProjection,
+    fieldSelection?: FieldSelection,
+  ): unknown {
+    const serializer = this._meta.model.serializer;
+    const serialized = serializer ? serializer(record) : record;
+    const profiled = this.applyProfile(
+      projectRecord(serialized, projection) as Record<string, unknown>,
+    );
+    const transformed = this.transform(profiled);
     if (fieldSelection?.isActive && fieldSelection.fields.length > 0) {
-      return applyFieldSelectionToArray(transformed as Record<string, unknown>[], fieldSelection);
+      return applyFieldSelection(transformed as Record<string, unknown>, fieldSelection);
     }
     return transformed;
   }
@@ -666,15 +677,15 @@ export abstract class CrudEndpoint<
    * (id read via `lookupField`) and keeps the original item.
    */
   protected async applyBatchAfterHooks(
-    items: ModelObject<M['model']>[],
+    items: Row<M>[],
     errors: Array<{ id: string; error: string }>,
     hooks: {
-      after: (item: ModelObject<M['model']>) => Promise<ModelObject<M['model']>>;
+      after: (item: Row<M>) => Promise<Row<M>>;
       afterHookMode: HookMode;
       stopOnError: boolean;
     },
-  ): Promise<ModelObject<M['model']>[]> {
-    const results: ModelObject<M['model']>[] = [];
+  ): Promise<Row<M>[]> {
+    const results: Row<M>[] = [];
     for (const item of items) {
       try {
         if (hooks.afterHookMode === 'fire-and-forget') {
@@ -703,7 +714,7 @@ export abstract class CrudEndpoint<
    */
   protected async finalizeBatchResponse(
     resultKey: 'updated' | 'deleted' | 'restored',
-    results: ModelObject<M['model']>[],
+    results: Row<M>[],
     notFound: string[],
     errors: Array<{ id: string; error: string }>,
   ): Promise<Response> {
@@ -751,9 +762,10 @@ export abstract class CrudEndpoint<
   protected defaultSelectFields: string[] = [];
 
   /**
-   * Gets the list of fields available for selection.
+   * Keys a response record may carry — the shape OpenAPI documents: the
+   * (per-request) schema's fields, computed fields, and relation names.
    */
-  protected getAvailableSelectFields(): string[] {
+  protected getResponseFields(): string[] {
     const schemaFields = Object.keys(this.getModelSchema().shape);
     const computedFields = this._meta.model.computedFields
       ? Object.keys(this._meta.model.computedFields)
@@ -761,8 +773,42 @@ export abstract class CrudEndpoint<
     const relationFields = this._meta.model.relations
       ? Object.keys(this._meta.model.relations)
       : [];
+    return [...schemaFields, ...computedFields, ...relationFields];
+  }
 
-    let available = [...schemaFields, ...computedFields, ...relationFields];
+  /**
+   * What a response may carry: {@link getResponseFields} plus the columns the
+   * engine manages for this model (timestamps, soft-delete marker, version),
+   * which the model opted into and may name outside its schema
+   * (`timestamps: true` with no `createdAt` in the schema). An included
+   * relation that declares a `schema` has its rows projected onto it; one
+   * without a schema documents no shape to project onto and passes through.
+   *
+   * Included rows keep only `relation.schema`'s keys, not the related model's
+   * managed columns: a relation names its model by table, so its timestamps /
+   * soft-delete / version config is not visible here. Declare those columns in
+   * the relation's schema to include them.
+   */
+  protected getResponseProjection(): ResponseProjection {
+    const model = this._meta.model;
+    const fields = new Set(this.getResponseFields());
+    const timestamps = getTimestampsConfig(model.timestamps);
+    if (timestamps.enabled) {
+      fields.add(timestamps.createdAt);
+      fields.add(timestamps.updatedAt);
+    }
+    if (this.isSoftDeleteEnabled()) fields.add(this.getSoftDeleteConfig().field);
+    if (this.isVersioningEnabled()) fields.add(this.getVersioningConfig().field);
+
+    const relations = new Map<string, ReadonlySet<string>>();
+    for (const [name, relation] of Object.entries(model.relations ?? {})) {
+      if (relation.schema) relations.set(name, new Set(Object.keys(relation.schema.shape)));
+    }
+    return { fields, relations };
+  }
+
+  protected getAvailableSelectFields(): string[] {
+    let available = this.getResponseFields();
 
     // Filter to allowed fields if specified
     if (this.allowedSelectFields.length > 0) {
@@ -954,18 +1000,18 @@ export abstract class CrudEndpoint<
    * when no policies are configured (endpoint behaviour is unchanged
    * from pre-0.7.0).
    */
-  protected getPolicies(): ModelPolicies<RowOf<M>> | undefined {
+  protected getPolicies(): ModelPolicies<Row<M>> | undefined {
     if (this.context) {
-      const fromCtx = getContextVar<ModelPolicies<RowOf<M>>>(this.context, POLICIES_CONTEXT_KEY);
+      const fromCtx = getContextVar<ModelPolicies<Row<M>>>(this.context, POLICIES_CONTEXT_KEY);
       if (fromCtx) return fromCtx;
     }
     // `ModelPolicies<X>` is invariant in X (X appears in both input and
     // output positions of `read`/`write`/`fields`), so the model's
-    // concrete row type doesn't satisfy `RowOf<M>` structurally — even
+    // concrete row type doesn't satisfy `Row<M>` structurally — even
     // when they're the same nominal type. The cast is honest at this
     // narrow boundary; downstream call sites in `applyRead*`/`applyWrite`
     // use the typed return without further casts.
-    return this._meta.model.policies as ModelPolicies<RowOf<M>> | undefined;
+    return this._meta.model.policies as ModelPolicies<Row<M>> | undefined;
   }
 
   // --- Response cache (config-driven) — shared across verbs -----------------
@@ -1054,10 +1100,10 @@ export abstract class CrudEndpoint<
    * the record if allowed, `null` otherwise. Field masking via
    * `policies.fields(...)` is also applied.
    *
-   * Typed against `RowOf<M>` so the policies' callbacks see the same row
+   * Typed against `Row<M>` so the policies' callbacks see the same row
    * shape as the model — no cast needed at the call site.
    */
-  protected async applyReadPolicy(record: RowOf<M>): Promise<RowOf<M> | null> {
+  protected async applyReadPolicy(record: Row<M>): Promise<Row<M> | null> {
     const policies = this.getPolicies();
     if (!policies) return record;
     const policyCtx = this.buildPolicyContext();
@@ -1079,10 +1125,10 @@ export abstract class CrudEndpoint<
    * Apply the policy `read` predicate to an array of records, dropping
    * disallowed entries and applying any field mask. Used by List endpoints.
    */
-  protected async applyReadPolicyToArray(records: RowOf<M>[]): Promise<RowOf<M>[]> {
+  protected async applyReadPolicyToArray(records: Row<M>[]): Promise<Row<M>[]> {
     const policies = this.getPolicies();
     if (!policies) return records;
-    const out: RowOf<M>[] = [];
+    const out: Row<M>[] = [];
     for (const record of records) {
       const masked = await this.applyReadPolicy(record);
       if (masked !== null) out.push(masked);
@@ -1094,7 +1140,7 @@ export abstract class CrudEndpoint<
    * Apply the policy `write` predicate (if any) to a record before mutation.
    * Throws `ForbiddenException` when the policy denies the write.
    */
-  protected async applyWritePolicy(record: RowOf<M>): Promise<void> {
+  protected async applyWritePolicy(record: Row<M>): Promise<void> {
     const policies = this.getPolicies();
     if (!policies?.write) return;
     const allowed = await policies.write(this.buildPolicyContext(), record);

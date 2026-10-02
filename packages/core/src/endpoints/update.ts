@@ -7,6 +7,7 @@ import { getNestedWritableRelations, isDirectNestedData } from '../core/nested-w
 import type {
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   NestedUpdateInput,
   NestedWriteResult,
@@ -289,10 +290,10 @@ export abstract class UpdateEndpoint<
    * transaction.
    */
   async after(
-    _prior: ModelObject<M['model']>,
-    current: ModelObject<M['model']>,
+    _prior: InferModelRow<M['model']>,
+    current: InferModelRow<M['model']>,
     _hookCtx: HookContext,
-  ): Promise<ModelObject<M['model']> | void> {
+  ): Promise<InferModelRow<M['model']> | void> {
     return current;
   }
 
@@ -324,7 +325,7 @@ export abstract class UpdateEndpoint<
     data: Partial<ModelObject<M['model']>>,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Finds the existing record for audit logging.
@@ -334,7 +335,7 @@ export abstract class UpdateEndpoint<
     _lookupValue: string,
     _additionalFilters?: Record<string, string>,
     _tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     // Default implementation returns null - override in adapter
     return null;
   }
@@ -405,11 +406,20 @@ export abstract class UpdateEndpoint<
       await this.applyWritePolicy(previousRecord);
     }
 
-    // ETag: Check If-Match for optimistic concurrency control
+    // ETag: Check If-Match for optimistic concurrency control. The client's
+    // ETag came from a read response, so hash the same representation —
+    // decrypted, policy-masked and finalized — not the stored row, which can
+    // carry columns, ciphertext or pre-serializer values the response never
+    // showed. A row the read policy hides has no read ETag to match, so it is
+    // hashed unmasked.
     if (this.etagEnabled && previousRecord) {
       const ifMatch = this.getContext().req.header('If-Match');
       if (ifMatch) {
-        const currentEtag = await generateETag(previousRecord);
+        const decrypted = (await this.decryptOnRead(
+          previousRecord as Record<string, unknown>,
+        )) as InferModelRow<M['model']>;
+        const visible = (await this.applyReadPolicy(decrypted)) ?? decrypted;
+        const currentEtag = await generateETag(await this.finalizeRecord(visible));
         if (!matchesIfMatch(ifMatch, currentEtag)) {
           return this.error('Resource has been modified by another request', 'CONFLICT', 409);
         }
@@ -452,7 +462,7 @@ export abstract class UpdateEndpoint<
       throw new NotFoundException(this._meta.model.tableName, lookupValue);
     }
 
-    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as ModelObject<M['model']>;
+    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as InferModelRow<M['model']>;
 
     // Get the parent ID for nested writes
     const parentId = this.getParentId(obj);
@@ -498,7 +508,7 @@ export abstract class UpdateEndpoint<
     // for `prior` — preserves the historical "after sees the row" shape
     // for that edge case rather than passing `null` and forcing every
     // override to handle it.
-    const priorForHook = (previousRecord ?? obj) as ModelObject<M['model']>;
+    const priorForHook = (previousRecord ?? obj) as InferModelRow<M['model']>;
     if (this.afterHookMode === 'fire-and-forget') {
       this.runAfterResponse(Promise.resolve(this.after(priorForHook, obj, hookCtx)));
     } else {
@@ -513,7 +523,7 @@ export abstract class UpdateEndpoint<
     // at rest stay ciphertext — this decrypt only feeds the downstream payloads.
     // `decryptOnRead` is a no-op without fieldEncryption.
     const previousDecrypted = previousRecord
-      ? ((await this.decryptOnRead(previousRecord as Record<string, unknown>)) as ModelObject<
+      ? ((await this.decryptOnRead(previousRecord as Record<string, unknown>)) as InferModelRow<
           M['model']
         >)
       : previousRecord;
@@ -543,7 +553,6 @@ export abstract class UpdateEndpoint<
       );
     }
 
-    // computed fields → serializer → profile → transform
     const result = await this.finalizeRecord(obj);
 
     // Add ETag header on response

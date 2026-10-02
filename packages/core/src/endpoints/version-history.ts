@@ -4,13 +4,14 @@ import { calculateChanges } from '../audit/config';
 import { ApiException, NotFoundException } from '../core/exceptions';
 import type {
   AuditFieldChange,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   VersionHistoryEntry,
 } from '../core/types';
 import { CrudEndpoint } from './base';
+import { pickFields } from './projection';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
-import type { ModelObject } from './types';
 
 /**
  * Decrypt the configured encrypted fields inside a version snapshot's `data`
@@ -24,6 +25,30 @@ async function decryptVersionEntry(
   decrypt: (record: Record<string, unknown>) => Promise<Record<string, unknown>>,
 ): Promise<VersionHistoryEntry> {
   return { ...entry, data: await decrypt(entry.data as Record<string, unknown>) };
+}
+
+/**
+ * Keep a snapshot to the model's response fields: a snapshot is the stored
+ * row, so a column the schema leaves out (a bucket key, a password hash) is in
+ * `data` and in `changes` unless projected away — same rule as every other
+ * record-returning verb.
+ */
+function projectVersionEntry(
+  entry: VersionHistoryEntry,
+  fields: ReadonlySet<string>,
+): VersionHistoryEntry {
+  return {
+    ...entry,
+    data: pickFields(entry.data, fields),
+    ...(entry.changes && { changes: projectChanges(entry.changes, fields) }),
+  };
+}
+
+function projectChanges(
+  changes: AuditFieldChange[],
+  fields: ReadonlySet<string>,
+): AuditFieldChange[] {
+  return changes.filter((change) => fields.has(change.field));
 }
 
 /**
@@ -183,8 +208,9 @@ export abstract class VersionHistoryEndpoint<
         )
       : versions;
 
+    const { fields } = this.getResponseProjection();
     return this.success({
-      versions: decryptedVersions,
+      versions: decryptedVersions.map((entry) => projectVersionEntry(entry, fields)),
       totalVersions: latestVersion,
     });
   }
@@ -309,7 +335,7 @@ export abstract class VersionReadEndpoint<
       ? await decryptVersionEntry(version, (r) => this.decryptOnRead(r))
       : version;
 
-    return this.success(decrypted);
+    return this.success(projectVersionEntry(decrypted, this.getResponseProjection().fields));
   }
 }
 
@@ -461,7 +487,7 @@ export abstract class VersionCompareEndpoint<
     return this.success({
       from,
       to,
-      changes,
+      changes: projectChanges(changes, this.getResponseProjection().fields),
     });
   }
 }
@@ -556,7 +582,7 @@ export abstract class VersionRollbackEndpoint<
     versionData: Record<string, unknown>,
     newVersion: number,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Checks if the parent record exists (owner-scoped). Override in adapter.
@@ -609,15 +635,10 @@ export abstract class VersionRollbackEndpoint<
 
     // Decrypt the returned record for the response (mirrors update/restore). The
     // value at rest stays the historical ciphertext; this only affects the body.
-    const decrypted = (await this.decryptOnRead(result as Record<string, unknown>)) as ModelObject<
-      M['model']
-    >;
+    const decrypted = (await this.decryptOnRead(
+      result as Record<string, unknown>,
+    )) as InferModelRow<M['model']>;
 
-    // Apply serializer if defined
-    const serialized = this._meta.model.serializer
-      ? this._meta.model.serializer(decrypted)
-      : decrypted;
-
-    return this.success(serialized);
+    return this.success(await this.finalizeRecord(decrypted));
   }
 }

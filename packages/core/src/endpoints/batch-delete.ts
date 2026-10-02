@@ -1,6 +1,6 @@
 import type { Env } from 'hono';
 import type { ZodObject, ZodRawShape } from 'zod';
-import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { HookMode, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import {
   batchResultResponses,
@@ -8,7 +8,6 @@ import {
   idsBodySchema,
   mergeRouteSchema,
 } from './responses';
-import type { ModelObject } from './types';
 
 /**
  * Result of a batch delete operation.
@@ -134,7 +133,7 @@ export abstract class BatchDeleteEndpoint<
    * Lifecycle hook: called after each item is deleted.
    * Override to perform side effects.
    */
-  async after(data: ModelObject<M['model']>, _tx?: unknown): Promise<ModelObject<M['model']>> {
+  async after(data: InferModelRow<M['model']>, _tx?: unknown): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -151,7 +150,7 @@ export abstract class BatchDeleteEndpoint<
   abstract batchDelete(
     ids: string[],
     tx?: unknown,
-  ): Promise<{ deleted: ModelObject<M['model']>[]; notFound: string[] }>;
+  ): Promise<{ deleted: InferModelRow<M['model']>[]; notFound: string[] }>;
 
   /**
    * Main handler for the batch delete operation.
@@ -185,7 +184,7 @@ export abstract class BatchDeleteEndpoint<
     // (mirrors list).
     const decrypted = (await Promise.all(
       deleted.map((record) => this.decryptOnRead(record as Record<string, unknown>)),
-    )) as ModelObject<M['model']>[];
+    )) as InferModelRow<M['model']>[];
 
     // Apply after hooks
     const results = await this.applyBatchAfterHooks(decrypted, errors, {

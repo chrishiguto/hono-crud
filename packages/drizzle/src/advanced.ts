@@ -25,7 +25,7 @@ import type {
   SearchOptions,
   SearchResult,
 } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { getDrizzleDb } from './connection';
 import {
   type DrizzleColumn,
@@ -107,7 +107,7 @@ export abstract class DrizzleUpsertEndpoint<
 
   override async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     return findByUpsertKeys(
       this.getDb(),
       this.getTable(),
@@ -117,13 +117,15 @@ export abstract class DrizzleUpsertEndpoint<
     );
   }
 
-  override async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
+  override async create(
+    data: Partial<ModelObject<M['model']>>,
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'drizzle');
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .insert(table)
       .values(record)
       .returning();
@@ -132,14 +134,14 @@ export abstract class DrizzleUpsertEndpoint<
   }
 
   override async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
     const pk = this._meta.model.primaryKeys[0];
     const pkValue = (existing as Record<string, unknown>)[pk];
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .update(table)
       .set(this.applyManagedUpdateFields(data as Record<string, unknown>))
       .where(eq(this.getColumn(pk), pkValue))
@@ -166,7 +168,7 @@ export abstract class DrizzleUpsertEndpoint<
   protected override async nativeUpsert(
     data: Partial<ModelObject<M['model']>>,
     _tx?: unknown,
-  ): Promise<{ data: ModelObject<M['model']>; created: boolean }> {
+  ): Promise<{ data: InferModelRow<M['model']>; created: boolean }> {
     const table = this.getTable();
     const upsertKeys = this.getUpsertKeys();
     const primaryKey = this._meta.model.primaryKeys[0];
@@ -207,7 +209,7 @@ export abstract class DrizzleUpsertEndpoint<
         ? updateSet
         : { [primaryKey]: sql`${this.getColumn(primaryKey)}` };
 
-    const insertQuery = cast<ModelObject<M['model']>>(this.getDb()).insert(table).values(record);
+    const insertQuery = cast<InferModelRow<M['model']>>(this.getDb()).insert(table).values(record);
 
     // Dialect-driven upsert: MySQL uses `ON DUPLICATE KEY UPDATE`, every
     // other supported dialect (sqlite, pg) uses `ON CONFLICT DO UPDATE`.
@@ -273,7 +275,7 @@ export abstract class DrizzleBatchUpsertEndpoint<
 
   override async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     return findByUpsertKeys(
       this.getDb(),
       this.getTable(),
@@ -283,13 +285,15 @@ export abstract class DrizzleBatchUpsertEndpoint<
     );
   }
 
-  override async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
+  override async create(
+    data: Partial<ModelObject<M['model']>>,
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'drizzle');
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .insert(table)
       .values(record)
       .returning();
@@ -298,14 +302,14 @@ export abstract class DrizzleBatchUpsertEndpoint<
   }
 
   override async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
     const pk = this._meta.model.primaryKeys[0];
     const pkValue = (existing as Record<string, unknown>)[pk];
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .update(table)
       .set(this.applyManagedUpdateFields(data as Record<string, unknown>))
       .where(eq(this.getColumn(pk), pkValue))
@@ -333,7 +337,7 @@ export abstract class DrizzleBatchUpsertEndpoint<
     items: Partial<ModelObject<M['model']>>[],
     _tx?: unknown,
   ): Promise<{
-    items: Array<{ data: ModelObject<M['model']>; created: boolean; index: number }>;
+    items: Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }>;
     createdCount: number;
     updatedCount: number;
     totalCount: number;
@@ -386,7 +390,7 @@ export abstract class DrizzleBatchUpsertEndpoint<
         ? updateSet
         : { [primaryKey]: sql`${this.getColumn(primaryKey)}` };
 
-    const insertQuery = cast<ModelObject<M['model']>>(this.getDb()).insert(table).values(records);
+    const insertQuery = cast<InferModelRow<M['model']>>(this.getDb()).insert(table).values(records);
 
     // Dialect-driven upsert: MySQL uses `ON DUPLICATE KEY UPDATE`, every
     // other supported dialect (sqlite, pg) uses `ON CONFLICT DO UPDATE`.
@@ -473,7 +477,7 @@ export abstract class DrizzleBulkPatchEndpoint<
   override async countMatching(filters: ListFilters): Promise<number> {
     const conditions = this.buildConditions(filters);
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .select({ count: sql<number>`count(*)` })
       .from(this.getTable())
       .where(and(...conditions));
@@ -484,10 +488,10 @@ export abstract class DrizzleBulkPatchEndpoint<
   override async applyPatch(
     data: Partial<ModelObject<M['model']>>,
     filters: ListFilters,
-  ): Promise<{ updated: number; records?: ModelObject<M['model']>[] }> {
+  ): Promise<{ updated: number; records?: InferModelRow<M['model']>[] }> {
     const conditions = this.buildConditions(filters);
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .update(this.getTable())
       .set(this.applyManagedUpdateFields(data as Record<string, unknown>))
       .where(and(...conditions))
@@ -681,11 +685,11 @@ export abstract class DrizzleVersionRollbackEndpoint<
     lookupValue: string,
     versionData: Record<string, unknown>,
     newVersion: number,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
     const versionField = this.getVersioningConfig().field;
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .update(table)
       .set({
         ...versionData,
@@ -783,7 +787,7 @@ export abstract class DrizzleAggregateEndpoint<
     // For complex aggregations with GROUP BY, HAVING, etc., we fetch records
     // and use the in-memory computeAggregations helper.
     // This ensures consistent behavior across all databases.
-    const records = await cast<ModelObject<M['model']>>(this.getDb())
+    const records = await cast<InferModelRow<M['model']>>(this.getDb())
       .select()
       .from(table)
       .where(whereClause);
@@ -879,7 +883,7 @@ export abstract class DrizzleSearchEndpoint<
   override async search(
     options: SearchOptions,
     filters: ListFilters,
-  ): Promise<SearchResult<ModelObject<M['model']>>> {
+  ): Promise<SearchResult<InferModelRow<M['model']>>> {
     const table = this.getTable();
 
     // Search-specific SQL — plugged into the shared list-query executor as
@@ -957,7 +961,7 @@ export abstract class DrizzleSearchEndpoint<
 
     // Execute the common query block (soft-delete + filters + count +
     // sorting + offset pagination) with the search SQL as extra conditions.
-    const queryResult = await executeDrizzleListQuery<ModelObject<M['model']>>({
+    const queryResult = await executeDrizzleListQuery<InferModelRow<M['model']>>({
       db: this.getDb(),
       table,
       filters,
@@ -1043,9 +1047,9 @@ export abstract class DrizzleExportEndpoint<
     return getColumn(this.getTable(), field);
   }
 
-  override async list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>> {
+  override async list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>> {
     // Execute common query logic (filters, search, sorting, pagination)
-    const queryResult = await executeDrizzleListQuery<ModelObject<M['model']>>({
+    const queryResult = await executeDrizzleListQuery<InferModelRow<M['model']>>({
       db: this.getDb(),
       table: this.getTable(),
       filters,
@@ -1117,7 +1121,7 @@ export abstract class DrizzleImportEndpoint<
    */
   override async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     return findByUpsertKeys(
       this.getDb(),
       this.getTable(),
@@ -1130,13 +1134,15 @@ export abstract class DrizzleImportEndpoint<
   /**
    * Creates a new record.
    */
-  override async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
+  override async create(
+    data: Partial<ModelObject<M['model']>>,
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'drizzle');
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .insert(table)
       .values(record)
       .returning();
@@ -1148,14 +1154,14 @@ export abstract class DrizzleImportEndpoint<
    * Updates an existing record.
    */
   override async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
     const pk = this._meta.model.primaryKeys[0];
     const pkValue = (existing as Record<string, unknown>)[pk];
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .update(table)
       .set(this.applyManagedUpdateFields(data as Record<string, unknown>))
       .where(eq(this.getColumn(pk), pkValue))
@@ -1217,7 +1223,7 @@ export abstract class DrizzleCloneEndpoint<
   override async findSource(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const table = this.getTable();
     const lookupColumn = this.getColumn(this.lookupField);
     const softDeleteConfig = this.getSoftDeleteConfig();
@@ -1232,7 +1238,7 @@ export abstract class DrizzleCloneEndpoint<
 
     pushSoftDeleteExclusion(conditions, softDeleteConfig, (field) => this.getColumn(field));
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .select()
       .from(table)
       .where(and(...conditions))
@@ -1243,7 +1249,7 @@ export abstract class DrizzleCloneEndpoint<
     return result[0];
   }
 
-  override async createClone(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
+  override async createClone(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>> {
     const table = this.getTable();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -1254,7 +1260,7 @@ export abstract class DrizzleCloneEndpoint<
       this.generateId(),
     );
 
-    const result = await cast<ModelObject<M['model']>>(this.getDb())
+    const result = await cast<InferModelRow<M['model']>>(this.getDb())
       .insert(table)
       .values(record)
       .returning();

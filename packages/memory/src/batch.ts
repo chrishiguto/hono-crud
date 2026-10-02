@@ -5,7 +5,7 @@ import { BatchDeleteEndpoint } from 'hono-crud/internal';
 import { BatchRestoreEndpoint } from 'hono-crud/internal';
 import { BatchUpsertEndpoint } from 'hono-crud/internal';
 import type { MetaInput } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { findByUpsertKeys, getStore } from './helpers';
 import { isVisible } from './visibility';
 
@@ -23,16 +23,18 @@ export abstract class MemoryBatchCreateEndpoint<
     return crypto.randomUUID();
   }
 
-  async batchCreate(items: Partial<ModelObject<M['model']>>[]): Promise<ModelObject<M['model']>[]> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async batchCreate(
+    items: Partial<ModelObject<M['model']>>[],
+  ): Promise<InferModelRow<M['model']>[]> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
-    const created: ModelObject<M['model']>[] = [];
+    const created: InferModelRow<M['model']>[] = [];
 
     for (const item of items) {
       // Resolve managed write-time fields (Model.id strategy + timestamps).
       const record = this.applyManagedInsertFields(item as Record<string, unknown>, 'memory', () =>
         this.generateId(),
-      ) as ModelObject<M['model']>;
+      ) as InferModelRow<M['model']>;
 
       const id = String((record as Record<string, unknown>)[primaryKey]);
       store.set(id, record);
@@ -53,10 +55,10 @@ export abstract class MemoryBatchUpdateEndpoint<
 > extends BatchUpdateEndpoint<E, M> {
   async batchUpdate(
     items: BatchUpdateItem<ModelObject<M['model']>>[],
-  ): Promise<{ updated: ModelObject<M['model']>[]; notFound: string[] }> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<{ updated: InferModelRow<M['model']>[]; notFound: string[] }> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const softDeleteConfig = this.getSoftDeleteConfig();
-    const updated: ModelObject<M['model']>[] = [];
+    const updated: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
     const tenant = this.getTenantScopeFilter();
 
@@ -82,7 +84,7 @@ export abstract class MemoryBatchUpdateEndpoint<
       const updatedRecord = {
         ...existing,
         ...this.applyManagedUpdateFields(item.data as Record<string, unknown>),
-      } as ModelObject<M['model']>;
+      } as InferModelRow<M['model']>;
       store.set(item.id, updatedRecord);
       updated.push(updatedRecord);
     }
@@ -101,10 +103,10 @@ export abstract class MemoryBatchDeleteEndpoint<
 > extends BatchDeleteEndpoint<E, M> {
   async batchDelete(
     ids: string[],
-  ): Promise<{ deleted: ModelObject<M['model']>[]; notFound: string[] }> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<{ deleted: InferModelRow<M['model']>[]; notFound: string[] }> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const softDeleteConfig = this.getSoftDeleteConfig();
-    const deleted: ModelObject<M['model']>[] = [];
+    const deleted: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
     const tenant = this.getTenantScopeFilter();
 
@@ -132,7 +134,7 @@ export abstract class MemoryBatchDeleteEndpoint<
         const softDeleted = {
           ...existing,
           [softDeleteConfig.field]: new Date(),
-        } as ModelObject<M['model']>;
+        } as InferModelRow<M['model']>;
         store.set(id, softDeleted);
         deleted.push(softDeleted);
       } else {
@@ -156,10 +158,10 @@ export abstract class MemoryBatchRestoreEndpoint<
 > extends BatchRestoreEndpoint<E, M> {
   async batchRestore(
     ids: string[],
-  ): Promise<{ restored: ModelObject<M['model']>[]; notFound: string[] }> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<{ restored: InferModelRow<M['model']>[]; notFound: string[] }> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const softDeleteConfig = this.getSoftDeleteConfig();
-    const restored: ModelObject<M['model']>[] = [];
+    const restored: InferModelRow<M['model']>[] = [];
     const notFound: string[] = [];
     const tenant = this.getTenantScopeFilter();
 
@@ -188,7 +190,7 @@ export abstract class MemoryBatchRestoreEndpoint<
       const restoredRecord = {
         ...existing,
         [softDeleteConfig.field]: null,
-      } as ModelObject<M['model']>;
+      } as InferModelRow<M['model']>;
       store.set(id, restoredRecord);
       restored.push(restoredRecord);
     }
@@ -217,22 +219,22 @@ export abstract class MemoryBatchUpsertEndpoint<
    */
   async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     return findByUpsertKeys(store, data as Record<string, unknown>, this.getUpsertKeys());
   }
 
   /**
    * Creates a new record.
    */
-  async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async create(data: Partial<ModelObject<M['model']>>): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'memory', () =>
       this.generateId(),
-    ) as ModelObject<M['model']>;
+    ) as InferModelRow<M['model']>;
 
     store.set(String((record as Record<string, unknown>)[primaryKey]), record);
     return record;
@@ -242,10 +244,10 @@ export abstract class MemoryBatchUpsertEndpoint<
    * Updates an existing record.
    */
   async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
     const id = String((existing as Record<string, unknown>)[primaryKey]);
 
@@ -253,7 +255,7 @@ export abstract class MemoryBatchUpsertEndpoint<
     const updated = {
       ...existing,
       ...this.applyManagedUpdateFields(data as Record<string, unknown>),
-    } as ModelObject<M['model']>;
+    } as InferModelRow<M['model']>;
 
     store.set(id, updated);
     return updated;
@@ -267,17 +269,17 @@ export abstract class MemoryBatchUpsertEndpoint<
     items: Partial<ModelObject<M['model']>>[],
     _tx?: unknown,
   ): Promise<{
-    items: Array<{ data: ModelObject<M['model']>; created: boolean; index: number }>;
+    items: Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }>;
     createdCount: number;
     updatedCount: number;
     totalCount: number;
     errors?: Array<{ index: number; error: string }>;
   }> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const upsertKeys = this.getUpsertKeys();
     const primaryKey = this._meta.model.primaryKeys[0];
 
-    const results: Array<{ data: ModelObject<M['model']>; created: boolean; index: number }> = [];
+    const results: Array<{ data: InferModelRow<M['model']>; created: boolean; index: number }> = [];
     let createdCount = 0;
     let updatedCount = 0;
 
@@ -285,7 +287,7 @@ export abstract class MemoryBatchUpsertEndpoint<
       const data = items[i];
 
       // Search for matching record
-      let existingRecord: ModelObject<M['model']> | null = null;
+      let existingRecord: InferModelRow<M['model']> | null = null;
       for (const existing of store.values()) {
         let allMatch = true;
         for (const key of upsertKeys) {
@@ -316,7 +318,7 @@ export abstract class MemoryBatchUpsertEndpoint<
         const updated = {
           ...existingRecord,
           ...this.applyManagedUpdateFields(updateData as Record<string, unknown>),
-        } as ModelObject<M['model']>;
+        } as InferModelRow<M['model']>;
 
         store.set(id, updated);
         results.push({ data: updated, created: false, index: i });
@@ -335,7 +337,7 @@ export abstract class MemoryBatchUpsertEndpoint<
           createData as Record<string, unknown>,
           'memory',
           () => this.generateId(),
-        ) as ModelObject<M['model']>;
+        ) as InferModelRow<M['model']>;
 
         const id = String((record as Record<string, unknown>)[primaryKey]);
         store.set(id, record);

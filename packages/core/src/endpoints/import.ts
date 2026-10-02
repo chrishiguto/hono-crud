@@ -3,7 +3,7 @@ import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { ConfigurationException, InputValidationException } from '../core/exceptions';
 import { getManagedInputExclusions, mapUniqueViolation } from '../core/managed-fields';
 import { applyUpsertRestore } from '../core/soft-delete';
-import type { MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { type CsvParseOptions, parseCsv, validateCsvHeaders } from '../utils/csv';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
@@ -580,11 +580,11 @@ export abstract class ImportEndpoint<
    * Override to perform post-processing.
    */
   async after(
-    result: ImportRowResult<ModelObject<M['model']>>,
+    result: ImportRowResult<InferModelRow<M['model']>>,
     _rowNumber: number,
     _mode: ImportMode,
     _tx?: unknown,
-  ): Promise<ImportRowResult<ModelObject<M['model']>>> {
+  ): Promise<ImportRowResult<InferModelRow<M['model']>>> {
     return result;
   }
 
@@ -600,7 +600,7 @@ export abstract class ImportEndpoint<
   abstract findExisting(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Creates a new record.
@@ -609,17 +609,17 @@ export abstract class ImportEndpoint<
   abstract create(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Updates an existing record.
    * Must be implemented by ORM-specific subclasses.
    */
   abstract update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Processes a single row for import.
@@ -629,7 +629,7 @@ export abstract class ImportEndpoint<
     rowNumber: number,
     options: ImportOptions,
     tx?: unknown,
-  ): Promise<ImportRowResult<ModelObject<M['model']>>> {
+  ): Promise<ImportRowResult<InferModelRow<M['model']>>> {
     // Validate the row
     const validation = this.validateRow(data, rowNumber);
     if (!validation.valid) {
@@ -749,7 +749,7 @@ export abstract class ImportEndpoint<
       failed: 0,
     };
 
-    const results: ImportRowResult<ModelObject<M['model']>>[] = [];
+    const results: ImportRowResult<InferModelRow<M['model']>>[] = [];
     let stopped = false;
     const effectiveBatchSize = options.stopOnError ? 1 : this.importBatchSize;
 
@@ -767,7 +767,7 @@ export abstract class ImportEndpoint<
               ...result,
               data: (await this.decryptOnRead(
                 result.data as Record<string, unknown>,
-              )) as ModelObject<M['model']>,
+              )) as InferModelRow<M['model']>,
             };
           }
           result = await this.after(result, rowNumber, options.mode);
@@ -816,9 +816,13 @@ export abstract class ImportEndpoint<
       );
     }
 
-    const importResult: ImportResult<ModelObject<M['model']>> = {
+    const importResult: ImportResult<unknown> = {
       summary,
-      results,
+      results: await Promise.all(
+        results.map(async (row) =>
+          row.data ? { ...row, data: await this.finalizeRecord(row.data) } : row,
+        ),
+      ),
     };
 
     // Return 207 Multi-Status if there were partial failures

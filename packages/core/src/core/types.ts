@@ -967,8 +967,18 @@ export interface Model<
   resolveSchema?: (ctx: SchemaResolveContext) => T | Promise<T>;
   /** Primary key field names - must be keys of the schema */
   primaryKeys: Array<SchemaKeys<T> & string>;
-  /** Optional serializer to transform objects before response */
-  serializer?: (obj: z.infer<T>) => unknown;
+  /**
+   * Optional serializer: turns the stored row into the response object.
+   * Receives the row the adapter read, not the public schema — with a Drizzle
+   * table that is `table.$inferSelect`, columns the schema omits included.
+   *
+   * The result is then projected onto the response fields (the schema's
+   * fields, computed fields, relations, managed timestamp / soft-delete /
+   * version columns), so a key outside them is dropped: spreading the row is
+   * safe, and a renamed key (`{ fileName: row.filename }`) needs to be declared
+   * in the schema to survive. A non-object result passes through unprojected.
+   */
+  serializer?: (row: RowOf<T, TTable>) => unknown;
   /**
    * ORM table reference (Drizzle Table, etc.).
    * For Prisma, a string naming the client delegate explicitly
@@ -1060,7 +1070,7 @@ export interface Model<
    * });
    * ```
    */
-  computedFields?: ComputedFieldsConfig<z.infer<T>>;
+  computedFields?: ComputedFieldsConfig<RowOf<T, TTable>>;
 
   /**
    * Configure audit logging for this model.
@@ -1178,7 +1188,7 @@ export interface Model<
    * List, Read, Update, and Delete endpoints. See `ModelPolicies` for the
    * full surface.
    */
-  policies?: ModelPolicies<z.infer<T>>;
+  policies?: ModelPolicies<RowOf<T, TTable>>;
 
   /**
    * Primary-key generation strategy. Applied at every write site
@@ -1809,6 +1819,28 @@ export interface SearchResult<T> {
  * type User = InferModel<typeof UserModel>;
  */
 export type InferModel<M extends Model> = z.infer<M['schema']>;
+
+/**
+ * The row a model's store hands back, which can be wider than the schema: a
+ * Drizzle table's `$inferSelect` (matched structurally, no drizzle-orm import)
+ * when `table` carries one, the schema's type otherwise (memory, Prisma's
+ * delegate-name string). Spelled over `Model`'s own generics so the interface
+ * can name its row; consumers use {@link InferModelRow}.
+ */
+type RowOf<T extends ZodObject<ZodRawShape>, TTable> = NonNullable<TTable> extends {
+  $inferSelect: infer R extends Record<string, unknown>;
+}
+  ? R
+  : z.infer<T>;
+
+/**
+ * Infer the stored row type from a Model — what `serializer` and the
+ * read-side hooks receive: a Drizzle table's `$inferSelect` when the model
+ * has one, the schema's type otherwise.
+ * @example
+ * type AttachmentRow = InferModelRow<typeof AttachmentModel>;
+ */
+export type InferModelRow<M extends Model> = RowOf<M['schema'], M['table']>;
 
 /**
  * Infer the TypeScript type from a MetaInput's model schema.

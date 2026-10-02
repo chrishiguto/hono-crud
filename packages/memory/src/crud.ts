@@ -20,7 +20,7 @@ import type {
   PaginatedResult,
   RelationConfig,
 } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { getStore, loadRelations, queryMemoryStore } from './helpers';
 import { isVisible } from './visibility';
 
@@ -53,8 +53,8 @@ export abstract class MemoryCreateEndpoint<
     return crypto.randomUUID();
   }
 
-  async create(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async create(data: ModelObject<M['model']>): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -62,7 +62,7 @@ export abstract class MemoryCreateEndpoint<
     // `id:'database'` throws here (memory has no database).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'memory', () =>
       this.generateId(),
-    ) as ModelObject<M['model']>;
+    ) as InferModelRow<M['model']>;
 
     const id = String((record as Record<string, unknown>)[primaryKey]);
     store.set(id, record);
@@ -114,8 +114,8 @@ export abstract class MemoryReadEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     includeOptions?: IncludeOptions,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const record = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -132,7 +132,7 @@ export abstract class MemoryReadEndpoint<
       record as Record<string, unknown>,
       this._meta,
       includeOptions,
-    ) as ModelObject<M['model']>;
+    ) as InferModelRow<M['model']>;
   }
 }
 
@@ -153,8 +153,8 @@ export abstract class MemoryUpdateEndpoint<
   protected async findExisting(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const existing = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -167,15 +167,15 @@ export abstract class MemoryUpdateEndpoint<
     }
 
     // Return a copy to preserve the state before update
-    return { ...existing } as ModelObject<M['model']>;
+    return { ...existing } as InferModelRow<M['model']>;
   }
 
   async update(
     lookupValue: string,
     data: Partial<ModelObject<M['model']>>,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const existing = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -190,7 +190,7 @@ export abstract class MemoryUpdateEndpoint<
     const updated = {
       ...existing,
       ...this.applyManagedUpdateFields(data as Record<string, unknown>),
-    } as ModelObject<M['model']>;
+    } as InferModelRow<M['model']>;
     store.set(lookupValue, updated);
 
     return updated;
@@ -338,8 +338,8 @@ export abstract class MemoryDeleteEndpoint<
   async findForDelete(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const existing = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -422,8 +422,8 @@ export abstract class MemoryDeleteEndpoint<
   async delete(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const existing = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -440,7 +440,7 @@ export abstract class MemoryDeleteEndpoint<
       const updated = {
         ...existing,
         [softDeleteConfig.field]: new Date(),
-      } as ModelObject<M['model']>;
+      } as InferModelRow<M['model']>;
       store.set(lookupValue, updated);
       return updated;
     } else {
@@ -461,8 +461,8 @@ export abstract class MemoryListEndpoint<
 > extends ListEndpoint<E, M> {
   protected override supportsCursorPagination = true;
 
-  async list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const items = queryMemoryStore(
       store,
       filters,
@@ -478,8 +478,8 @@ export abstract class MemoryListEndpoint<
       this.getRelationScope(filters.options.withDeleted),
     );
 
-    const loadItemRelations = (item: ModelObject<M['model']>) =>
-      loadRelations(item as Record<string, unknown>, this._meta, includeOptions) as ModelObject<
+    const loadItemRelations = (item: InferModelRow<M['model']>) =>
+      loadRelations(item as Record<string, unknown>, this._meta, includeOptions) as InferModelRow<
         M['model']
       >;
 
@@ -540,8 +540,8 @@ export abstract class MemoryRestoreEndpoint<
   async restore(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const existing = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -568,7 +568,7 @@ export abstract class MemoryRestoreEndpoint<
     const restored = {
       ...existing,
       [softDeleteConfig.field]: null,
-    } as ModelObject<M['model']>;
+    } as InferModelRow<M['model']>;
     store.set(lookupValue, restored);
 
     return restored;

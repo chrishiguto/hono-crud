@@ -44,6 +44,7 @@ import type {
   FilterConfig,
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationNamesOf,
@@ -79,9 +80,9 @@ export class CreateBuilder<M extends MetaInput, E extends Env = Env> {
     ctx?: HookContext,
   ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
   private _after?: (
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     ctx?: HookContext,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
   private _beforeHookMode?: HookMode;
   private _afterHookMode?: HookMode;
   private _allowNestedCreate: string[] = [];
@@ -138,9 +139,9 @@ export class CreateBuilder<M extends MetaInput, E extends Env = Env> {
   /** Set after hook. The optional second argument is the engine-built `HookContext`. */
   after(
     fn: (
-      data: ModelObject<M['model']>,
+      data: InferModelRow<M['model']>,
       ctx?: HookContext,
-    ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>,
+    ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>,
   ): this {
     this._after = fn;
     return this;
@@ -222,8 +223,8 @@ export class ListBuilder<M extends MetaInput, E extends Env = Env> {
   private _alwaysIncludeFields: string[] = [];
   private _defaultSelectFields: string[] = [];
   private _after?: (
-    items: ModelObject<M['model']>[],
-  ) => Promise<ModelObject<M['model']>[]> | ModelObject<M['model']>[];
+    items: InferModelRow<M['model']>[],
+  ) => Promise<InferModelRow<M['model']>[]> | InferModelRow<M['model']>[];
   private _transform?: (item: ModelObject<M['model']>) => unknown;
   private _middlewares: MiddlewareHandler<E>[] = [];
 
@@ -332,8 +333,8 @@ export class ListBuilder<M extends MetaInput, E extends Env = Env> {
   /** Set after hook */
   after(
     fn: (
-      items: ModelObject<M['model']>[],
-    ) => Promise<ModelObject<M['model']>[]> | ModelObject<M['model']>[],
+      items: InferModelRow<M['model']>[],
+    ) => Promise<InferModelRow<M['model']>[]> | InferModelRow<M['model']>[],
   ): this {
     this._after = fn;
     return this;
@@ -394,8 +395,8 @@ export class ReadBuilder<M extends MetaInput, E extends Env = Env> {
   private _alwaysIncludeFields: string[] = [];
   private _defaultSelectFields: string[] = [];
   private _after?: (
-    data: ModelObject<M['model']>,
-  ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>;
+    data: InferModelRow<M['model']>,
+  ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>;
   private _transform?: (item: ModelObject<M['model']>) => unknown;
   private _middlewares: MiddlewareHandler<E>[] = [];
 
@@ -471,8 +472,8 @@ export class ReadBuilder<M extends MetaInput, E extends Env = Env> {
   /** Set after hook */
   after(
     fn: (
-      data: ModelObject<M['model']>,
-    ) => Promise<ModelObject<M['model']>> | ModelObject<M['model']>,
+      data: InferModelRow<M['model']>,
+    ) => Promise<InferModelRow<M['model']>> | InferModelRow<M['model']>,
   ): this {
     this._after = fn;
     return this;
@@ -527,7 +528,7 @@ export class UpdateBuilder<M extends MetaInput, E extends Env = Env> {
     data: Partial<ModelObject<M['model']>>,
     ctx?: HookContext,
   ) => Promise<Partial<ModelObject<M['model']>>> | Partial<ModelObject<M['model']>>;
-  private _after?: AfterUpdateHook<ModelObject<M['model']>>;
+  private _after?: AfterUpdateHook<InferModelRow<M['model']>>;
   private _beforeHookMode?: HookMode;
   private _afterHookMode?: HookMode;
   private _transform?: (item: ModelObject<M['model']>) => unknown;
@@ -620,7 +621,7 @@ export class UpdateBuilder<M extends MetaInput, E extends Env = Env> {
    * transaction so consumers can compute field-level diffs without a
    * re-fetch in `before`.
    */
-  after(fn: AfterUpdateHook<ModelObject<M['model']>>): this {
+  after(fn: AfterUpdateHook<InferModelRow<M['model']>>): this {
     this._after = fn;
     return this;
   }
@@ -692,7 +693,7 @@ export class DeleteBuilder<M extends MetaInput, E extends Env = Env> {
   private _additionalFilters?: string[];
   private _includeCascadeResults?: boolean;
   private _before?: (lookupValue: string, ctx?: HookContext) => Promise<void> | void;
-  private _after?: AfterDeleteHook<ModelObject<M['model']>>;
+  private _after?: AfterDeleteHook<InferModelRow<M['model']>>;
   private _beforeHookMode?: HookMode;
   private _afterHookMode?: HookMode;
   private _middlewares: MiddlewareHandler<E>[] = [];
@@ -767,7 +768,7 @@ export class DeleteBuilder<M extends MetaInput, E extends Env = Env> {
    * results are still emitted in the response body when
    * `includeCascade(true)` is configured.
    */
-  after(fn: AfterDeleteHook<ModelObject<M['model']>>): this {
+  after(fn: AfterDeleteHook<InferModelRow<M['model']>>): this {
     this._after = fn;
     return this;
   }

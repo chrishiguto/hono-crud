@@ -5,6 +5,7 @@ import { getManagedInputExclusions, rethrowAsConstraintError } from '../core/man
 import type {
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationConfig,
@@ -237,9 +238,9 @@ export abstract class CreateEndpoint<
    * after the response is sent and cannot trigger rollback.
    */
   async after(
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     _hookCtx: HookContext,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -266,7 +267,7 @@ export abstract class CreateEndpoint<
    * Creates the resource in the database.
    * Must be implemented by ORM-specific subclasses.
    */
-  abstract create(data: ModelObject<M['model']>, tx?: unknown): Promise<ModelObject<M['model']>>;
+  abstract create(data: ModelObject<M['model']>, tx?: unknown): Promise<InferModelRow<M['model']>>;
 
   /**
    * Creates nested related records.
@@ -319,11 +320,11 @@ export abstract class CreateEndpoint<
     // (see `rethrowAsConstraintError`) so callers receive a structured
     // `{success:false, error:{code:'CONFLICT', …}}` JSON instead of a
     // plaintext 500.
-    obj = await this.create(obj, hookCtx.db.tx).catch(rethrowAsConstraintError);
-    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as ModelObject<M['model']>;
+    const inserted = await this.create(obj, hookCtx.db.tx).catch(rethrowAsConstraintError);
+    let row = (await this.decryptOnRead(inserted)) as InferModelRow<M['model']>;
 
     // Get the parent ID for nested writes
-    const parentId = this.getParentId(obj);
+    const parentId = this.getParentId(row);
 
     // Process nested creates
     const nestedResults: Record<string, unknown[]> = {};
@@ -354,7 +355,7 @@ export abstract class CreateEndpoint<
           formattedResults[relationName] = results[0] || null;
         }
       }
-      obj = { ...obj, ...formattedResults } as ModelObject<M['model']>;
+      row = { ...row, ...formattedResults };
     }
 
     // Handle after hook based on mode.
@@ -362,31 +363,25 @@ export abstract class CreateEndpoint<
     // already been queued. Sequential mode runs inside the parent tx
     // (when the adapter wraps in one) — throwing rolls back the INSERT.
     if (this.afterHookMode === 'fire-and-forget') {
-      this.runAfterResponse(Promise.resolve(this.after(obj, hookCtx)));
+      this.runAfterResponse(Promise.resolve(this.after(row, hookCtx)));
     } else {
-      obj = await this.after(obj, hookCtx);
+      row = await this.after(row, hookCtx);
     }
 
     // Audit logging
     if (this.isAuditEnabled() && parentId !== null) {
       const auditLogger = this.getAuditLogger();
       this.runAfterResponse(
-        auditLogger.logCreate(
-          this._meta.model.tableName,
-          parentId,
-          obj as Record<string, unknown>,
-          this.getAuditUserId(),
-        ),
+        auditLogger.logCreate(this._meta.model.tableName, parentId, row, this.getAuditUserId()),
       );
     }
 
     // Emit created event
     if (parentId !== null) {
-      this.runAfterResponse(this.emitEvent('created', { recordId: parentId, data: obj }));
+      this.runAfterResponse(this.emitEvent('created', { recordId: parentId, data: row }));
     }
 
-    // computed fields → serializer → profile → transform
-    const result = await this.finalizeRecord(obj);
+    const result = await this.finalizeRecord(row);
 
     // Invalidate this tenant's cached list/read entries (best-effort).
     await this.invalidateModelCache();

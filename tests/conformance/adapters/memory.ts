@@ -106,13 +106,35 @@ const tenantModel = defineModel({
 });
 const tenantMeta = defineMeta({ model: tenantModel });
 
+// The finalize model leaves the leg's tenant column out of its schema, and its
+// create verbs stamp it on insert: the row carries a server-only column the
+// schema never declares, which no response may echo (the finalize cell).
+// `version` starts at 1 so version snapshots are numbered from 1.
+const finalizeSchema = schema.omit({ tenantId: true }).extend({ version: z.number().default(1) });
+type FinalizeItem = z.infer<typeof finalizeSchema>;
+const SERVER_ONLY_VALUE = 'tenant-a';
+const SERVER_ONLY_UPDATED = 'tenant-b';
+
 const finalizeModel = defineModel({
   tableName: TABLE,
-  schema,
+  schema: finalizeSchema,
   primaryKeys: ['id'],
   softDelete: { field: 'deletedAt' },
   timestamps: true,
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  // A read-policy field mask: read's ETag hashes the masked record, so
+  // update's If-Match check has to mask it too (the finalize ETag test).
+  policies: { fields: () => ({ role: undefined }) },
+  versioning: { field: 'version' },
+  relations: {
+    parent: {
+      type: 'belongsTo',
+      model: TABLE,
+      foreignKey: 'parentId',
+      localKey: 'id',
+      schema: finalizeSchema,
+    },
+  },
   computedFields: {
     nameUpper: {
       schema: z.string(),
@@ -320,18 +342,69 @@ class TenantBulkPatch extends MemoryBulkPatchEndpoint {
 
 class FinalizeCreate extends MemoryCreateEndpoint {
   _meta = finalizeMeta;
+
+  override async before(data: FinalizeItem): Promise<FinalizeItem> {
+    return { ...data, tenantId: SERVER_ONLY_VALUE } as FinalizeItem;
+  }
 }
 class FinalizeRead extends MemoryReadEndpoint {
   _meta = finalizeMeta;
+  protected override etagEnabled = true;
+
+  protected override allowedIncludes = ['parent'];
 }
 class FinalizeList extends MemoryListEndpoint {
   _meta = finalizeMeta;
 }
 class FinalizeBatchCreate extends MemoryBatchCreateEndpoint {
   _meta = finalizeMeta;
+
+  override async before(data: Partial<FinalizeItem>): Promise<Partial<FinalizeItem>> {
+    return { ...data, tenantId: SERVER_ONLY_VALUE } as Partial<FinalizeItem>;
+  }
 }
 class FinalizeBatchDelete extends MemoryBatchDeleteEndpoint {
   _meta = finalizeMeta;
+}
+class FinalizeExport extends MemoryExportEndpoint {
+  _meta = finalizeMeta;
+
+  protected override allowedIncludes = ['parent'];
+}
+class FinalizeBatchUpsert extends MemoryBatchUpsertEndpoint {
+  _meta = finalizeMeta;
+  protected override upsertKeys = ['email'];
+}
+// Updates stamp a different server-only value, so version snapshots and their
+// `changes` carry a column the schema never declares (the version cell).
+class FinalizeUpdate extends MemoryUpdateEndpoint {
+  _meta = finalizeMeta;
+  protected override etagEnabled = true;
+
+  override async before(data: Partial<FinalizeItem>): Promise<Partial<FinalizeItem>> {
+    return { ...data, tenantId: SERVER_ONLY_UPDATED } as Partial<FinalizeItem>;
+  }
+}
+class FinalizeVersionHistory extends MemoryVersionHistoryEndpoint {
+  _meta = finalizeMeta;
+}
+class FinalizeVersionRead extends MemoryVersionReadEndpoint {
+  _meta = finalizeMeta;
+}
+class FinalizeVersionCompare extends MemoryVersionCompareEndpoint {
+  _meta = finalizeMeta;
+}
+class FinalizeVersionRollback extends MemoryVersionRollbackEndpoint {
+  _meta = finalizeMeta;
+}
+class FinalizeImport extends MemoryImportEndpoint {
+  _meta = finalizeMeta;
+  protected override upsertKeys = ['email'];
+}
+class FinalizeBulkPatch extends MemoryBulkPatchEndpoint {
+  _meta = finalizeMeta;
+  protected override filterFields = ['email'];
+  protected override returnRecords = true;
 }
 
 // Encryption endpoint classes — every write/returning verb on the enc model.
@@ -499,6 +572,15 @@ async function setup(): Promise<AdapterContext> {
     read: FinalizeRead,
     batchCreate: FinalizeBatchCreate,
     batchDelete: FinalizeBatchDelete,
+    export: FinalizeExport,
+    batchUpsert: FinalizeBatchUpsert,
+    import: FinalizeImport,
+    bulkPatch: FinalizeBulkPatch,
+    update: FinalizeUpdate,
+    versionHistory: FinalizeVersionHistory,
+    versionRead: FinalizeVersionRead,
+    versionCompare: FinalizeVersionCompare,
+    versionRollback: FinalizeVersionRollback,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });
@@ -573,6 +655,7 @@ export const memoryConformance: AdapterDescriptor = {
     // Memory bulk-patch re-reads and returns the patched rows, so returnRecords,
     // decrypt-on-return, and per-record `bulk_patched` events all work.
     bulkPatchReturnsRecords: true,
+    versionHistory: true,
   },
   tenant: {
     field: 'tenantId',

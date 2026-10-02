@@ -1,7 +1,13 @@
 import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { getManagedInputExclusions } from '../core/managed-fields';
-import type { HookMode, ListFilters, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type {
+  HookMode,
+  InferModelRow,
+  ListFilters,
+  MetaInput,
+  OpenAPIRouteSchema,
+} from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import type { ListFilterParseOptions, ModelObject } from './types';
@@ -69,7 +75,7 @@ export abstract class BulkPatchEndpoint<
   protected abstract applyPatch(
     data: Partial<ModelObject<M['model']>>,
     filters: ListFilters,
-  ): Promise<{ updated: number; records?: ModelObject<M['model']>[] }>;
+  ): Promise<{ updated: number; records?: InferModelRow<M['model']>[] }>;
 
   /** Before hook: called before the bulk patch is applied */
   protected async beforeBulkPatch?(
@@ -79,7 +85,9 @@ export abstract class BulkPatchEndpoint<
   ): Promise<Partial<ModelObject<M['model']>>>;
 
   /** After hook: called after the bulk patch is applied */
-  protected async afterBulkPatch?(result: BulkPatchResult<ModelObject<M['model']>>): Promise<void>;
+  protected async afterBulkPatch?(
+    result: BulkPatchResult<InferModelRow<M['model']>>,
+  ): Promise<void>;
 
   getSchema(): OpenAPIRouteSchema {
     const updateSchema = this.getUpdateSchema();
@@ -220,10 +228,10 @@ export abstract class BulkPatchEndpoint<
     const decryptedRecords = result.records
       ? ((await Promise.all(
           result.records.map((record) => this.decryptOnRead(record as Record<string, unknown>)),
-        )) as ModelObject<M['model']>[])
+        )) as InferModelRow<M['model']>[])
       : result.records;
 
-    const bulkResult: BulkPatchResult<ModelObject<M['model']>> = {
+    const bulkResult: BulkPatchResult<InferModelRow<M['model']>> = {
       matched: matchedCount,
       updated: result.updated,
       dryRun: false,
@@ -247,12 +255,17 @@ export abstract class BulkPatchEndpoint<
     // Mutation changes which rows a cached list/read would return.
     await this.invalidateModelCache();
 
+    const records =
+      this.returnRecords && bulkResult.records
+        ? await this.finalizeArray(bulkResult.records)
+        : undefined;
+
     return this.json({
       success: true,
       matched: bulkResult.matched,
       updated: bulkResult.updated,
       dryRun: false,
-      ...(this.returnRecords && bulkResult.records ? { records: bulkResult.records } : {}),
+      ...(records ? { records } : {}),
     });
   }
 }

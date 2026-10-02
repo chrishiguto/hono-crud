@@ -25,7 +25,7 @@ import type {
   SearchOptions,
   SearchResult,
 } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { applyUpsertRestore, isFilterOperator } from 'hono-crud/internal';
 import { matchesFilter } from './filter';
 import {
@@ -55,8 +55,8 @@ export abstract class MemoryCloneEndpoint<
   async findSource(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const existing = store.get(lookupValue);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -69,8 +69,8 @@ export abstract class MemoryCloneEndpoint<
     return existing;
   }
 
-  async createClone(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async createClone(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const pk = this._meta.model.primaryKeys[0];
 
     // Base CloneEndpoint already stripped the source PK, so the managed
@@ -78,7 +78,7 @@ export abstract class MemoryCloneEndpoint<
     // default-branch generator; `id:'database'` throws (memory has no DB).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'memory', () =>
       this.generateId(),
-    ) as ModelObject<M['model']>;
+    ) as InferModelRow<M['model']>;
 
     const id = String((record as Record<string, unknown>)[pk]);
     store.set(id, record);
@@ -106,16 +106,16 @@ export abstract class MemoryUpsertEndpoint<
    */
   async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     return findByUpsertKeys(store, data as Record<string, unknown>, this.getUpsertKeys());
   }
 
   /**
    * Creates a new record.
    */
-  async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async create(data: Partial<ModelObject<M['model']>>): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -123,7 +123,7 @@ export abstract class MemoryUpsertEndpoint<
     // `id:'database'` throws here (memory has no database).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'memory', () =>
       this.generateId(),
-    ) as ModelObject<M['model']>;
+    ) as InferModelRow<M['model']>;
 
     store.set(String((record as Record<string, unknown>)[primaryKey]), record);
     return record;
@@ -133,10 +133,10 @@ export abstract class MemoryUpsertEndpoint<
    * Updates an existing record.
    */
   async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
     const id = String((existing as Record<string, unknown>)[primaryKey]);
 
@@ -144,7 +144,7 @@ export abstract class MemoryUpsertEndpoint<
     const updated = {
       ...existing,
       ...this.applyManagedUpdateFields(data as Record<string, unknown>),
-    } as ModelObject<M['model']>;
+    } as InferModelRow<M['model']>;
 
     store.set(id, updated);
     return updated;
@@ -160,8 +160,8 @@ export abstract class MemoryUpsertEndpoint<
   protected async nativeUpsert(
     data: Partial<ModelObject<M['model']>>,
     _tx?: unknown,
-  ): Promise<{ data: ModelObject<M['model']>; created: boolean }> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<{ data: InferModelRow<M['model']>; created: boolean }> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
 
     // Match-and-restore: soft-deleted matches are updated and un-deleted
@@ -189,7 +189,7 @@ export abstract class MemoryUpsertEndpoint<
           existingRecord as Record<string, unknown>,
           this.getSoftDeleteConfig(),
         ),
-      } as ModelObject<M['model']>;
+      } as InferModelRow<M['model']>;
 
       store.set(id, updated);
       return { data: updated, created: false };
@@ -207,7 +207,7 @@ export abstract class MemoryUpsertEndpoint<
         createData as Record<string, unknown>,
         'memory',
         () => this.generateId(),
-      ) as ModelObject<M['model']>;
+      ) as InferModelRow<M['model']>;
 
       const id = String((record as Record<string, unknown>)[primaryKey]);
       store.set(id, record);
@@ -391,15 +391,15 @@ export abstract class MemoryVersionRollbackEndpoint<
     lookupValue: string,
     versionData: Record<string, unknown>,
     newVersion: number,
-  ): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const versionField = this.getVersioningConfig().field;
 
     // Create updated record with version data and new version number
     const updated = {
       ...versionData,
       [versionField]: newVersion,
-    } as ModelObject<M['model']>;
+    } as InferModelRow<M['model']>;
 
     store.set(lookupValue, updated);
     return updated;
@@ -418,7 +418,7 @@ export abstract class MemoryAggregateEndpoint<
    * Performs aggregation on in-memory data.
    */
   async aggregate(options: AggregateOptions): Promise<AggregateResult> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     let records = Array.from(store.values()) as Record<string, unknown>[];
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -496,8 +496,8 @@ export abstract class MemorySearchEndpoint<
   async search(
     options: SearchOptions,
     filters: ListFilters,
-  ): Promise<SearchResult<ModelObject<M['model']>>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<SearchResult<InferModelRow<M['model']>>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     let records = Array.from(store.values()) as Record<string, unknown>[];
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -541,7 +541,7 @@ export abstract class MemorySearchEndpoint<
     // in-memory adapter). This mirrors the SQL adapters' explicit wildcard
     // escaping.
     const searchableFields = this.getSearchableFields();
-    let recordsForScoring = records as ModelObject<M['model']>[];
+    let recordsForScoring = records as InferModelRow<M['model']>[];
     let scoringOptions = options;
 
     if (options.mode === 'all') {
@@ -602,7 +602,7 @@ export abstract class MemorySearchEndpoint<
         result.item as Record<string, unknown>,
         this._meta,
         includeOptions,
-      ) as ModelObject<M['model']>,
+      ) as InferModelRow<M['model']>,
     }));
 
     return {
@@ -620,8 +620,8 @@ export abstract class MemoryExportEndpoint<
   E extends Env = Env,
   M extends MetaInput = MetaInput,
 > extends ExportEndpoint<E, M> {
-  async list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const items = queryMemoryStore(
       store,
       filters,
@@ -647,7 +647,7 @@ export abstract class MemoryExportEndpoint<
     );
     const itemsWithRelations = paginatedItems.map(
       (item) =>
-        loadRelations(item as Record<string, unknown>, this._meta, includeOptions) as ModelObject<
+        loadRelations(item as Record<string, unknown>, this._meta, includeOptions) as InferModelRow<
           M['model']
         >,
     );
@@ -679,16 +679,16 @@ export abstract class MemoryImportEndpoint<
    */
   async findExisting(
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']> | null> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']> | null> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     return findByUpsertKeys(store, data as Record<string, unknown>, this.getUpsertKeys());
   }
 
   /**
    * Creates a new record.
    */
-  async create(data: Partial<ModelObject<M['model']>>): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  async create(data: Partial<ModelObject<M['model']>>): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -696,7 +696,7 @@ export abstract class MemoryImportEndpoint<
     // `id:'database'` throws here (memory has no database).
     const record = this.applyManagedInsertFields(data as Record<string, unknown>, 'memory', () =>
       this.generateId(),
-    ) as ModelObject<M['model']>;
+    ) as InferModelRow<M['model']>;
 
     store.set(String((record as Record<string, unknown>)[primaryKey]), record);
     return record;
@@ -706,10 +706,10 @@ export abstract class MemoryImportEndpoint<
    * Updates an existing record.
    */
   async update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
-  ): Promise<ModelObject<M['model']>> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<InferModelRow<M['model']>> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
     const id = String((existing as Record<string, unknown>)[primaryKey]);
 
@@ -717,7 +717,7 @@ export abstract class MemoryImportEndpoint<
     const updated = {
       ...existing,
       ...this.applyManagedUpdateFields(data as Record<string, unknown>),
-    } as ModelObject<M['model']>;
+    } as InferModelRow<M['model']>;
 
     store.set(id, updated);
     return updated;
@@ -740,11 +740,11 @@ export abstract class MemoryBulkPatchEndpoint<
   async applyPatch(
     data: Partial<ModelObject<M['model']>>,
     filters: ListFilters,
-  ): Promise<{ updated: number; records?: ModelObject<M['model']>[] }> {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  ): Promise<{ updated: number; records?: InferModelRow<M['model']>[] }> {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const primaryKey = this._meta.model.primaryKeys[0];
     const items = this.getFilteredItems(filters);
-    const updated: ModelObject<M['model']>[] = [];
+    const updated: InferModelRow<M['model']>[] = [];
 
     for (const item of items) {
       const id = String((item as Record<string, unknown>)[primaryKey]);
@@ -753,7 +753,7 @@ export abstract class MemoryBulkPatchEndpoint<
       const patched = {
         ...item,
         ...this.applyManagedUpdateFields(data as Record<string, unknown>),
-      } as ModelObject<M['model']>;
+      } as InferModelRow<M['model']>;
       store.set(id, patched);
       updated.push(patched);
     }
@@ -761,8 +761,8 @@ export abstract class MemoryBulkPatchEndpoint<
     return { updated: updated.length, records: updated };
   }
 
-  private getFilteredItems(filters: ListFilters): ModelObject<M['model']>[] {
-    const store = getStore<ModelObject<M['model']>>(this._meta.model.tableName);
+  private getFilteredItems(filters: ListFilters): InferModelRow<M['model']>[] {
+    const store = getStore<InferModelRow<M['model']>>(this._meta.model.tableName);
     const softDeleteConfig = this.getSoftDeleteConfig();
 
     // Soft-deleted records are never bulk-patched — same visibility rule as

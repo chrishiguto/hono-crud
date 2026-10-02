@@ -102,12 +102,22 @@ const tenantModel = defineModel({
 });
 const tenantMeta = defineMeta({ model: tenantModel });
 
+// The finalize model leaves the leg's tenant column out of its schema, and its
+// create verbs stamp it on insert: the row carries a server-only column the
+// schema never declares, which no response may echo (the finalize cell).
+const finalizeSchema = schema.omit({ status: true });
+type FinalizeItem = z.infer<typeof finalizeSchema>;
+const SERVER_ONLY_VALUE = 'pending';
+
 const finalizeModel = defineModel({
   tableName: TABLE,
-  schema,
+  schema: finalizeSchema,
   primaryKeys: ['id'],
   softDelete: { field: 'deletedAt' },
   serializationProfile: { name: 'conformance', exclude: ['age'] },
+  // A read-policy field mask: read's ETag hashes the masked record, so
+  // update's If-Match check has to mask it too (the finalize ETag test).
+  policies: { fields: () => ({ role: undefined }) },
   computedFields: {
     nameUpper: {
       schema: z.string(),
@@ -271,10 +281,20 @@ async function setup(): Promise<AdapterContext> {
   class FinalizeCreate extends PrismaCreateEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+
+    override async before(data: FinalizeItem): Promise<FinalizeItem> {
+      return { ...data, status: SERVER_ONLY_VALUE } as FinalizeItem;
+    }
   }
   class FinalizeRead extends PrismaReadEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+    protected override etagEnabled = true;
+  }
+  class FinalizeUpdate extends PrismaUpdateEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override etagEnabled = true;
   }
   class FinalizeList extends PrismaListEndpoint {
     _meta = finalizeMeta;
@@ -283,10 +303,34 @@ async function setup(): Promise<AdapterContext> {
   class FinalizeBatchCreate extends PrismaBatchCreateEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+
+    override async before(data: Partial<FinalizeItem>): Promise<Partial<FinalizeItem>> {
+      return { ...data, status: SERVER_ONLY_VALUE } as Partial<FinalizeItem>;
+    }
   }
   class FinalizeBatchDelete extends PrismaBatchDeleteEndpoint {
     _meta = finalizeMeta;
     prisma = crudClient;
+  }
+  class FinalizeExport extends PrismaExportEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+  }
+  class FinalizeBatchUpsert extends PrismaBatchUpsertEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override upsertKeys = ['email'];
+  }
+  class FinalizeImport extends PrismaImportEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override upsertKeys = ['email'];
+  }
+  class FinalizeBulkPatch extends PrismaBulkPatchEndpoint {
+    _meta = finalizeMeta;
+    prisma = crudClient;
+    protected override filterFields = ['email'];
+    protected override returnRecords = true;
   }
 
   class HookItemCreate extends PrismaCreateEndpoint {
@@ -442,6 +486,11 @@ async function setup(): Promise<AdapterContext> {
     read: FinalizeRead,
     batchCreate: FinalizeBatchCreate,
     batchDelete: FinalizeBatchDelete,
+    export: FinalizeExport,
+    batchUpsert: FinalizeBatchUpsert,
+    import: FinalizeImport,
+    bulkPatch: FinalizeBulkPatch,
+    update: FinalizeUpdate,
   });
   registerCrud(app, '/cursor-items', { create: ItemCreate, list: CursorItemList });
   registerCrud(app, '/hook-items', { create: HookItemCreate });
@@ -522,6 +571,9 @@ export const prismaConformance: AdapterDescriptor = {
     // no `bulk_patched` events fire and `returnRecords` is unsupported. Pinned
     // by the prisma-only zero-events cell; never "fixed".
     bulkPatchReturnsRecords: false,
+    // The examples `users` table has no version column, so the finalize model
+    // carries no versioning and mounts no version verbs; the skip is named.
+    versionHistory: false,
   },
   tenant: {
     field: 'status',

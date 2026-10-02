@@ -1,7 +1,7 @@
 import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
 import { getManagedInputExclusions } from '../core/managed-fields';
-import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { HookMode, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import { batchResultResponses, errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';
@@ -194,7 +194,7 @@ export abstract class BatchUpdateEndpoint<
    * Lifecycle hook: called after each item is updated.
    * Override to transform result before returning.
    */
-  async after(data: ModelObject<M['model']>, _tx?: unknown): Promise<ModelObject<M['model']>> {
+  async after(data: InferModelRow<M['model']>, _tx?: unknown): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -209,7 +209,7 @@ export abstract class BatchUpdateEndpoint<
   abstract batchUpdate(
     items: BatchUpdateItem<ModelObject<M['model']>>[],
     tx?: unknown,
-  ): Promise<{ updated: ModelObject<M['model']>[]; notFound: string[] }>;
+  ): Promise<{ updated: InferModelRow<M['model']>[]; notFound: string[] }>;
 
   /**
    * Main handler for the batch update operation.
@@ -247,7 +247,7 @@ export abstract class BatchUpdateEndpoint<
     // Decrypt each persisted record before the after-hooks / response (mirrors list).
     const decrypted = (await Promise.all(
       updated.map((record) => this.decryptOnRead(record as Record<string, unknown>)),
-    )) as ModelObject<M['model']>[];
+    )) as InferModelRow<M['model']>[];
 
     // Apply after hooks
     const results = await this.applyBatchAfterHooks(decrypted, errors, {

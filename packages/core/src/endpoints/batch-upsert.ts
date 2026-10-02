@@ -1,10 +1,9 @@
 import type { Env } from 'hono';
 import { type ZodObject, type ZodRawShape, z } from 'zod';
-import { applyComputedFields } from '../core/computed-fields';
 import { getLogger } from '../core/logger';
 import { getManagedInputExclusions, rethrowAsConstraintError } from '../core/managed-fields';
 import { applyUpsertRestore } from '../core/soft-delete';
-import type { HookMode, MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { HookMode, InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';
@@ -282,11 +281,11 @@ export abstract class BatchUpsertEndpoint<
    * Override to transform result before adding to response.
    */
   async afterItem(
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     _index: number,
     _created: boolean,
     _tx?: unknown,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -304,9 +303,9 @@ export abstract class BatchUpsertEndpoint<
    * Lifecycle hook: called after processing the entire batch.
    */
   async afterBatch(
-    result: BatchUpsertResult<ModelObject<M['model']>>,
+    result: BatchUpsertResult<InferModelRow<M['model']>>,
     _tx?: unknown,
-  ): Promise<BatchUpsertResult<ModelObject<M['model']>>> {
+  ): Promise<BatchUpsertResult<InferModelRow<M['model']>>> {
     return result;
   }
 
@@ -325,7 +324,7 @@ export abstract class BatchUpsertEndpoint<
   abstract findExisting(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Creates a new record.
@@ -334,17 +333,17 @@ export abstract class BatchUpsertEndpoint<
   abstract create(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Updates an existing record.
    * Must be implemented by ORM-specific subclasses.
    */
   abstract update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Performs a single upsert operation.
@@ -353,14 +352,14 @@ export abstract class BatchUpsertEndpoint<
     data: Partial<ModelObject<M['model']>>,
     index: number,
     tx?: unknown,
-  ): Promise<BatchUpsertItemResult<ModelObject<M['model']>>> {
+  ): Promise<BatchUpsertItemResult<InferModelRow<M['model']>>> {
     const existing = await this.findExisting(data, tx);
     const isCreate = !existing;
 
     // Apply beforeItem hook
     const processedData = await this.beforeItem(data, index, isCreate, tx);
 
-    let result: ModelObject<M['model']>;
+    let result: InferModelRow<M['model']>;
 
     if (existing) {
       // Filter out create-only fields for update
@@ -410,7 +409,7 @@ export abstract class BatchUpsertEndpoint<
   protected async nativeBatchUpsert(
     items: Partial<ModelObject<M['model']>>[],
     tx?: unknown,
-  ): Promise<BatchUpsertResult<ModelObject<M['model']>>> {
+  ): Promise<BatchUpsertResult<InferModelRow<M['model']>>> {
     // Default implementation falls back to non-native batch upsert
     // ORM adapters should override this method
     getLogger().warn(
@@ -426,8 +425,8 @@ export abstract class BatchUpsertEndpoint<
   protected async performStandardBatchUpsert(
     items: Partial<ModelObject<M['model']>>[],
     tx?: unknown,
-  ): Promise<BatchUpsertResult<ModelObject<M['model']>>> {
-    const results: BatchUpsertItemResult<ModelObject<M['model']>>[] = [];
+  ): Promise<BatchUpsertResult<InferModelRow<M['model']>>> {
+    const results: BatchUpsertItemResult<InferModelRow<M['model']>>[] = [];
     const errors: Array<{ index: number; error: string }> = [];
     let createdCount = 0;
     let updatedCount = 0;
@@ -454,7 +453,7 @@ export abstract class BatchUpsertEndpoint<
       }
     }
 
-    const result: BatchUpsertResult<ModelObject<M['model']>> = {
+    const result: BatchUpsertResult<InferModelRow<M['model']>> = {
       items: results,
       createdCount,
       updatedCount,
@@ -475,7 +474,7 @@ export abstract class BatchUpsertEndpoint<
   async batchUpsert(
     items: Partial<ModelObject<M['model']>>[],
     tx?: unknown,
-  ): Promise<BatchUpsertResult<ModelObject<M['model']>>> {
+  ): Promise<BatchUpsertResult<InferModelRow<M['model']>>> {
     if (this.useNativeUpsert) {
       return this.nativeBatchUpsert(items, tx);
     }
@@ -512,7 +511,7 @@ export abstract class BatchUpsertEndpoint<
     result.items = await Promise.all(
       result.items.map(async (item) => ({
         ...item,
-        data: (await this.decryptOnRead(item.data as Record<string, unknown>)) as ModelObject<
+        data: (await this.decryptOnRead(item.data as Record<string, unknown>)) as InferModelRow<
           M['model']
         >,
       })),
@@ -521,20 +520,14 @@ export abstract class BatchUpsertEndpoint<
     // Apply afterBatch hook
     result = await this.afterBatch(result);
 
-    // Apply computed fields if defined (const capture carries the narrowing
-    // into the async map closure — the deep property access would not).
-    const computedFields = this._meta.model.computedFields;
-    if (computedFields) {
-      result.items = await Promise.all(
-        result.items.map(async (item) => ({
-          ...item,
-          data: (await applyComputedFields(
-            item.data as Record<string, unknown>,
-            computedFields,
-          )) as ModelObject<M['model']>,
-        })),
-      );
-    }
+    // Computed fields go on before audit + events (which carry them); the rest
+    // of the finalize chain runs on the response below.
+    result.items = await Promise.all(
+      result.items.map(async (item) => ({
+        ...item,
+        data: await this.withComputedFields(item.data),
+      })),
+    );
 
     // Audit logging
     this.logBatchAudit(
@@ -558,23 +551,16 @@ export abstract class BatchUpsertEndpoint<
       );
     }
 
-    // serializer → profile → transform per item (computed already applied above).
-    // Profile + transform were previously skipped here — running them closes the
-    // same serialization-profile leak fixed across the other write endpoints.
-    result.items = result.items.map((item) => {
-      const serialized = this._meta.model.serializer
-        ? this._meta.model.serializer(item.data)
-        : item.data;
-      const profiled = this.applyProfile(serialized as Record<string, unknown>);
-      return {
-        ...item,
-        data: this.transform(profiled as ModelObject<M['model']>) as ModelObject<M['model']>,
-      };
-    });
+    // The rest of the finalize chain (computed fields already applied above).
+    const shaped = this.shapeArray(result.items.map((item) => item.data));
+    const response: BatchUpsertResult<unknown> = {
+      ...result,
+      items: result.items.map((item, i) => ({ ...item, data: shaped[i] })),
+    };
 
     // Mutation changes which rows a cached list/read would return.
     await this.invalidateModelCache();
 
-    return this.success(result);
+    return this.success(response);
   }
 }

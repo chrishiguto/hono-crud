@@ -14,14 +14,17 @@
 // Model & meta foundation
 // ============================================================================
 
-// The meta contract endpoints are generic over, and the model shape adapters
-// operate on (`Row` always derives from the consumer's Zod schema).
-// `RelationNamesOf` / `FieldsOf` expose the model's literal relation-name and
-// schema-key unions so adapter authoring surfaces can constrain parameters.
+// The meta contract endpoints are generic over, and the shapes adapters
+// operate on: `InferModelRow` is the stored row adapters read and return (a
+// Drizzle table's `$inferSelect`, else the Zod schema), `ModelObject` the
+// public schema shape request bodies carry. `RelationNamesOf` / `FieldsOf`
+// expose the model's literal relation-name and schema-key unions so adapter
+// authoring surfaces can constrain parameters.
 export type {
   AbstractConstructor,
   Constructor,
   FieldsOf,
+  InferModelRow,
   MetaInput,
   RelationNamesOf,
 } from './core/types';

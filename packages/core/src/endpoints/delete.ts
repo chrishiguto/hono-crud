@@ -6,13 +6,13 @@ import type {
   CascadeAction,
   HookContext,
   HookMode,
+  InferModelRow,
   MetaInput,
   OpenAPIRouteSchema,
   RelationConfig,
 } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
-import type { ModelObject } from './types';
 
 /**
  * Result of cascade operations during delete.
@@ -240,7 +240,7 @@ export abstract class DeleteEndpoint<
    * `afterHookMode === 'sequential'` AND the adapter wraps in a real
    * transaction.
    */
-  async after(_prior: ModelObject<M['model']>, _hookCtx: HookContext): Promise<void> {
+  async after(_prior: InferModelRow<M['model']>, _hookCtx: HookContext): Promise<void> {
     // Override in subclass
   }
 
@@ -344,7 +344,7 @@ export abstract class DeleteEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Deletes the resource from the database.
@@ -355,7 +355,7 @@ export abstract class DeleteEndpoint<
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Checks restrict constraints before deletion.
@@ -459,7 +459,7 @@ export abstract class DeleteEndpoint<
     if (parentId !== null) {
       const previousDecrypted = (await this.decryptOnRead(
         existingItem as Record<string, unknown>,
-      )) as ModelObject<M['model']>;
+      )) as InferModelRow<M['model']>;
 
       // Audit logging
       if (this.isAuditEnabled()) {

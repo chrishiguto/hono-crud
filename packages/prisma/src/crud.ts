@@ -6,7 +6,7 @@ import { DeleteEndpoint } from 'hono-crud/internal';
 import { ListEndpoint } from 'hono-crud/internal';
 import { buildCursorPage, buildIncludeOptions, buildOffsetPageInfo } from 'hono-crud/internal';
 import type { IncludeOptions, ListFilters, MetaInput, PaginatedResult } from 'hono-crud/internal';
-import type { ModelObject } from 'hono-crud/internal';
+import type { InferModelRow, ModelObject } from 'hono-crud/internal';
 import { getPrismaClient } from './connection';
 import {
   type PrismaClient,
@@ -29,8 +29,8 @@ export abstract class PrismaCreateEndpoint<
   declare prisma?: PrismaClient;
   protected useTransaction = false;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -45,7 +45,7 @@ export abstract class PrismaCreateEndpoint<
     return runInTransaction(this, () => super.handle());
   }
 
-  override async create(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
+  override async create(data: ModelObject<M['model']>): Promise<InferModelRow<M['model']>> {
     const model = await this.getModel();
 
     // Resolve managed write-time fields (Model.id strategy + timestamps).
@@ -65,15 +65,15 @@ export abstract class PrismaReadEndpoint<
 > extends ReadEndpoint<E, M> {
   declare prisma?: PrismaClient;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   override async read(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
     includeOptions?: IncludeOptions,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -113,8 +113,8 @@ export abstract class PrismaUpdateEndpoint<
   declare prisma?: PrismaClient;
   protected useTransaction = false;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -135,7 +135,7 @@ export abstract class PrismaUpdateEndpoint<
   protected override async findExisting(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -155,7 +155,7 @@ export abstract class PrismaUpdateEndpoint<
     lookupValue: string,
     data: Partial<ModelObject<M['model']>>,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
 
     // First find the record (excluding soft-deleted)
@@ -185,8 +185,8 @@ export abstract class PrismaDeleteEndpoint<
   declare prisma?: PrismaClient;
   protected useTransaction = false;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
   /**
@@ -207,7 +207,7 @@ export abstract class PrismaDeleteEndpoint<
   override async findForDelete(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -226,7 +226,7 @@ export abstract class PrismaDeleteEndpoint<
   override async delete(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null> {
+  ): Promise<InferModelRow<M['model']> | null> {
     const model = await this.getModel();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
@@ -276,11 +276,11 @@ export abstract class PrismaListEndpoint<
   /** Cursor pagination is implemented via Prisma's native `cursor` window. */
   protected override supportsCursorPagination = true;
 
-  protected async getModel(): Promise<PrismaModelOperations<ModelObject<M['model']>>> {
-    return getPrismaModel<ModelObject<M['model']>>(getPrismaClient(this), this._meta.model);
+  protected async getModel(): Promise<PrismaModelOperations<InferModelRow<M['model']>>> {
+    return getPrismaModel<InferModelRow<M['model']>>(getPrismaClient(this), this._meta.model);
   }
 
-  override async list(filters: ListFilters): Promise<PaginatedResult<ModelObject<M['model']>>> {
+  override async list(filters: ListFilters): Promise<PaginatedResult<InferModelRow<M['model']>>> {
     // Execute common query logic
     const queryResult = await executePrismaQuery({
       model: await this.getModel(),

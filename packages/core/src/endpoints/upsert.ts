@@ -6,6 +6,7 @@ import { getNestedWritableRelations, isDirectNestedData } from '../core/nested-w
 import { applyUpsertRestore } from '../core/soft-delete';
 import type {
   HookMode,
+  InferModelRow,
   MetaInput,
   NestedUpdateInput,
   NestedWriteResult,
@@ -345,7 +346,7 @@ export abstract class UpsertEndpoint<
    */
   async beforeUpdate(
     data: Partial<ModelObject<M['model']>>,
-    _existing: ModelObject<M['model']>,
+    _existing: InferModelRow<M['model']>,
     _tx?: unknown,
   ): Promise<Partial<ModelObject<M['model']>>> {
     return data;
@@ -356,10 +357,10 @@ export abstract class UpsertEndpoint<
    * Override to transform result before returning.
    */
   async after(
-    data: ModelObject<M['model']>,
+    data: InferModelRow<M['model']>,
     _created: boolean,
     _tx?: unknown,
-  ): Promise<ModelObject<M['model']>> {
+  ): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -378,7 +379,7 @@ export abstract class UpsertEndpoint<
   abstract findExisting(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Creates a new record.
@@ -387,17 +388,17 @@ export abstract class UpsertEndpoint<
   abstract create(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Updates an existing record.
    * Must be implemented by ORM-specific subclasses.
    */
   abstract update(
-    existing: ModelObject<M['model']>,
+    existing: InferModelRow<M['model']>,
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<ModelObject<M['model']>>;
+  ): Promise<InferModelRow<M['model']>>;
 
   /**
    * Performs a native database upsert operation.
@@ -412,7 +413,7 @@ export abstract class UpsertEndpoint<
   protected async nativeUpsert(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<UpsertResult<ModelObject<M['model']>>> {
+  ): Promise<UpsertResult<InferModelRow<M['model']>>> {
     // Default implementation falls back to non-native upsert
     // ORM adapters should override this method
     getLogger().warn(
@@ -428,7 +429,7 @@ export abstract class UpsertEndpoint<
   protected async performStandardUpsert(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<UpsertResult<ModelObject<M['model']>>> {
+  ): Promise<UpsertResult<InferModelRow<M['model']>>> {
     const existing = await this.findExisting(data, tx);
 
     if (existing) {
@@ -472,7 +473,7 @@ export abstract class UpsertEndpoint<
   async upsert(
     data: Partial<ModelObject<M['model']>>,
     tx?: unknown,
-  ): Promise<UpsertResult<ModelObject<M['model']>>> {
+  ): Promise<UpsertResult<InferModelRow<M['model']>>> {
     if (this.useNativeUpsert) {
       return this.nativeUpsert(data, tx);
     }
@@ -548,7 +549,7 @@ export abstract class UpsertEndpoint<
 
     // Decrypt configured fields on the persisted record before it flows to
     // nested writes / after-hook / response (mirrors create/update/read).
-    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as ModelObject<M['model']>;
+    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as InferModelRow<M['model']>;
 
     // Get the parent ID for nested writes
     const parentId = this.getParentId(obj);
@@ -598,7 +599,7 @@ export abstract class UpsertEndpoint<
     if (this.isAuditEnabled() && parentId !== null) {
       const auditLogger = this.getAuditLogger();
       const existingDecrypted = existing
-        ? ((await this.decryptOnRead(existing as Record<string, unknown>)) as ModelObject<
+        ? ((await this.decryptOnRead(existing as Record<string, unknown>)) as InferModelRow<
             M['model']
           >)
         : undefined;
@@ -629,7 +630,6 @@ export abstract class UpsertEndpoint<
       );
     }
 
-    // computed fields → serializer → profile → transform
     const finalized = await this.finalizeRecord(obj);
 
     // Return with created flag and appropriate status code

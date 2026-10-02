@@ -6,7 +6,7 @@ import {
   rethrowAsConstraintError,
   stripManagedInsertFields,
 } from '../core/managed-fields';
-import type { MetaInput, OpenAPIRouteSchema } from '../core/types';
+import type { InferModelRow, MetaInput, OpenAPIRouteSchema } from '../core/types';
 import { CrudEndpoint } from './base';
 import { errorResponseSchema, mergeRouteSchema } from './responses';
 import { type ModelObject, getSchemaFields } from './types';
@@ -117,7 +117,7 @@ export abstract class CloneEndpoint<
    * Lifecycle hook: called before creating the clone.
    * Override to transform cloned data before saving.
    */
-  async before(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
+  async before(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -125,7 +125,7 @@ export abstract class CloneEndpoint<
    * Lifecycle hook: called after creating the clone.
    * Override to transform result before returning.
    */
-  async after(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>> {
+  async after(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>> {
     return data;
   }
 
@@ -136,13 +136,13 @@ export abstract class CloneEndpoint<
   abstract findSource(
     lookupValue: string,
     additionalFilters?: Record<string, string>,
-  ): Promise<ModelObject<M['model']> | null>;
+  ): Promise<InferModelRow<M['model']> | null>;
 
   /**
    * Creates the cloned record.
    * Must be implemented by ORM-specific subclasses.
    */
-  abstract createClone(data: ModelObject<M['model']>): Promise<ModelObject<M['model']>>;
+  abstract createClone(data: InferModelRow<M['model']>): Promise<InferModelRow<M['model']>>;
 
   /**
    * Main handler for the clone operation.
@@ -172,7 +172,7 @@ export abstract class CloneEndpoint<
     // `String()`-cast the stored `{ ct, iv, v }` envelope and double-encrypt it.
     const decryptedSource = (await this.decryptOnRead(
       source as Record<string, unknown>,
-    )) as ModelObject<M['model']>;
+    )) as InferModelRow<M['model']>;
 
     // Build clone data: source minus engine-managed write fields
     // (primary keys + any configured `Model.timestamps`) and minus
@@ -197,11 +197,11 @@ export abstract class CloneEndpoint<
     Object.assign(cloneData, overrides);
 
     // Run before hook
-    const data = await this.before(cloneData as ModelObject<M['model']>);
+    const data = await this.before(cloneData as InferModelRow<M['model']>);
 
     // Encrypt configured fields before the adapter insert (after the
     // before-hook, before persist) — mirrors create.
-    const encrypted = (await this.encryptOnWrite(data as Record<string, unknown>)) as ModelObject<
+    const encrypted = (await this.encryptOnWrite(data as Record<string, unknown>)) as InferModelRow<
       M['model']
     >;
 
@@ -213,11 +213,11 @@ export abstract class CloneEndpoint<
     // prisma P2002) to the engine's standard 409 envelope. Routed
     // through the centralised `rethrowAsConstraintError` so the rule
     // is never duplicated per endpoint.
-    let obj: ModelObject<M['model']> =
+    let obj: InferModelRow<M['model']> =
       await this.createClone(encrypted).catch(rethrowAsConstraintError);
 
     // Decrypt the persisted record before the after-hook / response (mirrors create).
-    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as ModelObject<M['model']>;
+    obj = (await this.decryptOnRead(obj as Record<string, unknown>)) as InferModelRow<M['model']>;
 
     // Run after hook
     obj = await this.after(obj);
@@ -229,7 +229,6 @@ export abstract class CloneEndpoint<
       this.runAfterResponse(this.emitEvent('cloned', { recordId: clonedId, data: obj }));
     }
 
-    // computed fields → serializer → profile → transform
     const result = await this.finalizeRecord(obj);
 
     // Mutation changes which rows a cached list/read would return.
