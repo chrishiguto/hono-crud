@@ -1,5 +1,5 @@
 ---
-'hono-crud': minor
+'hono-crud': patch
 ---
 
 Give every `registerCrud` route a default OpenAPI `operationId` (#151).
