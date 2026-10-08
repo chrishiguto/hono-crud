@@ -145,11 +145,7 @@ async function toolNamesOverHttp(app: { request: (...args: any[]) => Promise<Res
     jsonrpc: '2.0',
     id: 1,
     method: 'initialize',
-    params: {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'c', version: '1' },
-    },
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c', version: '1' } },
   });
   const sid = initRes.headers.get('mcp-session-id') ?? undefined;
   await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, sid);
@@ -179,11 +175,7 @@ async function callToolOverHttp(
     jsonrpc: '2.0',
     id: 1,
     method: 'initialize',
-    params: {
-      protocolVersion: '2025-06-18',
-      capabilities: {},
-      clientInfo: { name: 'c', version: '1' },
-    },
+    params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'c', version: '1' } },
   });
   const sid = initRes.headers.get('mcp-session-id') ?? undefined;
   await post({ jsonrpc: '2.0', method: 'notifications/initialized' }, sid);
@@ -713,18 +705,12 @@ describe('header forwarding', () => {
   it('forwards X-API-Key and X-Tenant-ID by default and strips other headers', async () => {
     const { app, seen } = captureApp();
 
-    await dispatch(
-      app,
-      listTarget,
-      {},
-      {
-        // Header names are matched case-insensitively.
-        'X-API-Key': 'key-1',
-        'x-tenant-id': 'tenant-1',
-        authorization: 'Bearer tok',
-        'x-custom': 'nope',
-      },
-    );
+    await dispatch(app, listTarget, {}, {
+      'X-API-Key': 'key-1', // matched case-insensitively
+      'x-tenant-id': 'tenant-1',
+      authorization: 'Bearer tok',
+      'x-custom': 'nope',
+    });
 
     expect(seen()).toEqual({
       apiKey: 'key-1',
@@ -737,9 +723,13 @@ describe('header forwarding', () => {
   it('narrows forwarding to an explicit allow-list', async () => {
     const { app, seen } = captureApp();
 
-    await dispatch(app, listTarget, {}, { 'x-api-key': 'key-1', authorization: 'Bearer tok' }, [
-      'x-api-key',
-    ]);
+    await dispatch(
+      app,
+      listTarget,
+      {},
+      { 'x-api-key': 'key-1', authorization: 'Bearer tok' },
+      ['x-api-key'],
+    );
 
     expect(seen()).toEqual({
       apiKey: 'key-1',
@@ -762,15 +752,10 @@ describe('header forwarding', () => {
     mcp.resource('/users', endpoints);
     app.all('/mcp', mcp.handler());
 
-    const result = await callToolOverHttp(
-      app,
-      'users_list',
-      {},
-      {
-        'x-api-key': 'key-1',
-        authorization: 'Bearer tok',
-      },
-    );
+    const result = await callToolOverHttp(app, 'users_list', {}, {
+      'x-api-key': 'key-1',
+      authorization: 'Bearer tok',
+    });
 
     expect(result?.isError).toBeFalsy();
     expect(seen.apiKey).toBe('key-1');
@@ -807,9 +792,7 @@ describe('structured output', () => {
     expect(structured.success).toBe(true);
     expect(structured.result.email).toBe('sc@example.com');
     // Text content still mirrors the same payload.
-    expect(
-      JSON.parse(textOf(created as { content: Array<{ type: string; text?: string }> })),
-    ).toEqual(structured);
+    expect(JSON.parse(textOf(created as { content: Array<{ type: string; text?: string }> }))).toEqual(structured);
   });
 
   it('does not advertise an outputSchema when a 2xx declares a non-JSON alternative (export CSV)', async () => {

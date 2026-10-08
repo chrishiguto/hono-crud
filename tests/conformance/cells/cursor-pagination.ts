@@ -71,10 +71,7 @@ function cursorQuery(info: CursorResultInfo, extra = ''): string {
   return `cursor=${encodeURIComponent(info.next_cursor as string)}&limit=3${extra}`;
 }
 
-export function registerCursorPaginationCells(
-  _descriptor: AdapterDescriptor,
-  ctx: CtxGetter,
-): void {
+export function registerCursorPaginationCells(_descriptor: AdapterDescriptor, ctx: CtxGetter): void {
   test('cursor pagination: next-only walk visits every record in cursor-field order with exact result_info', async () => {
     const { app } = ctx();
     const idsSorted = await seedCursorRows(app);
@@ -105,7 +102,9 @@ export function registerCursorPaginationCells(
     expect('prev_cursor' in page3.result_info).toBe(false);
 
     // The walk covers every record exactly once, in cursor-field order.
-    const walked = [...page1.result, ...page2.result, ...page3.result].map((record) => record.id);
+    const walked = [...page1.result, ...page2.result, ...page3.result].map(
+      (record) => record.id,
+    );
     expect(walked).toEqual(idsSorted);
   });
 
@@ -119,10 +118,7 @@ export function registerCursorPaginationCells(
     const page1 = await fetchCursorPage(app, 'limit=3&sort=email&order=desc');
     expect(page1.result.map((record) => record.id)).toEqual(idsSorted.slice(0, 3));
 
-    const page2 = await fetchCursorPage(
-      app,
-      cursorQuery(page1.result_info, '&sort=email&order=desc'),
-    );
+    const page2 = await fetchCursorPage(app, cursorQuery(page1.result_info, '&sort=email&order=desc'));
     expect(page2.result.map((record) => record.id)).toEqual(idsSorted.slice(3, 6));
   });
 

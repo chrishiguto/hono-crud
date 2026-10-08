@@ -54,10 +54,7 @@ export function registerBulkPatchCells(descriptor: AdapterDescriptor, ctx: CtxGe
     // Make the updatedAt bump observable on millisecond-resolution backends.
     await sleep(5);
 
-    const patchResponse = await app.request(
-      '/items/bulk?role=guest',
-      jsonInit('PATCH', { age: 99 }),
-    );
+    const patchResponse = await app.request('/items/bulk?role=guest', jsonInit('PATCH', { age: 99 }));
     expect(patchResponse.status).toBe(200);
     const body = await readJson<BulkPatchBody>(patchResponse);
     expect(body).toEqual({ success: true, matched: 1, updated: 1, dryRun: false });
