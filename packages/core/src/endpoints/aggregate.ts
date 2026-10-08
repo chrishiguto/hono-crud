@@ -89,17 +89,24 @@ export abstract class AggregateEndpoint<
 
   /**
    * Fields clients may filter by (`?field=value`, equality only). Empty means
-   * every model field. Other query keys are ignored, and values are converted
-   * and checked against the field type exactly like list filters (a value
-   * outside an enum is 400).
+   * every model field except encrypted ones and the tenant field. Other query
+   * keys are ignored, and values are converted and checked against the field
+   * type exactly like list filters (a value outside an enum is 400).
    */
   protected filterFields: string[] = [];
 
-  /** `filterFields`, or every model field when it is empty. */
+  /**
+   * `filterFields`, or the default set when it is empty. The default drops
+   * fields a filter can never usefully match: encrypted fields (ciphertext
+   * with a fresh IV never equals the value) and the tenant field (the tenant
+   * scope overwrites it).
+   */
   protected getFilterableFields(): string[] {
-    return this.filterFields.length > 0
-      ? this.filterFields
-      : Object.keys(this.getModelSchema().shape);
+    if (this.filterFields.length > 0) return this.filterFields;
+    const excluded = new Set<string>(this._meta.model.fieldEncryption?.fields);
+    const tenant = this.getMultiTenantConfig();
+    if (tenant.enabled) excluded.add(tenant.field);
+    return Object.keys(this.getModelSchema().shape).filter((field) => !excluded.has(field));
   }
 
   /**

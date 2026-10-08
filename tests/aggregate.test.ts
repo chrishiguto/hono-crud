@@ -10,6 +10,7 @@ import {
   parseAggregateQuery,
   registerCrud,
 } from 'hono-crud';
+import { StaticKeyProvider } from 'hono-crud/encryption';
 /**
  * Tests for aggregation functionality.
  */
@@ -590,6 +591,48 @@ describe('Aggregations', () => {
       const body = (await response.json()) as { result: { values: { count: number } } };
       // isActive is not filterable here, so only category applies: 3 furniture rows.
       expect(body.result.values.count).toBe(3);
+    });
+
+    it('leaves encrypted and tenant fields out of the default filter params', () => {
+      const SecretSchema = z.object({
+        id: z.uuid(),
+        name: z.string(),
+        ssn: z.string(),
+        tenantId: z.string(),
+      });
+      const SecretModel = defineModel({
+        tableName: 'secrets',
+        schema: SecretSchema,
+        primaryKeys: ['id'],
+        fieldEncryption: {
+          fields: ['ssn'],
+          keyProvider: new StaticKeyProvider('tKxYshdHC+/f7GSqpsQg7bGzSC6RpJ/E9TSmq0jB6TQ=', 'k'),
+        },
+        multiTenant: { field: 'tenantId' },
+      });
+      class SecretAggregate extends MemoryAggregateEndpoint {
+        _meta = { model: SecretModel };
+      }
+      class ExplicitSecretAggregate extends MemoryAggregateEndpoint {
+        _meta = { model: SecretModel };
+        filterFields = ['ssn', 'tenantId'];
+      }
+      const docApp = fromHono(new OpenAPIHono());
+      registerCrud(docApp, '/secrets', { aggregate: SecretAggregate });
+      registerCrud(docApp, '/explicit-secrets', { aggregate: ExplicitSecretAggregate });
+      const doc = docApp.getOpenAPIDocument({
+        openapi: '3.0.0',
+        info: { title: 't', version: '1' },
+      });
+      const paramNames = (path: string) =>
+        (doc.paths[path]?.get?.parameters as { name: string }[] | undefined)?.map((p) => p.name);
+
+      expect(paramNames('/secrets/aggregate')).toContain('name');
+      expect(paramNames('/secrets/aggregate')).not.toContain('ssn');
+      expect(paramNames('/secrets/aggregate')).not.toContain('tenantId');
+      expect(paramNames('/explicit-secrets/aggregate')).toEqual(
+        expect.arrayContaining(['ssn', 'tenantId']),
+      );
     });
 
     it('filters a date field by equality instead of matching every row', async () => {
