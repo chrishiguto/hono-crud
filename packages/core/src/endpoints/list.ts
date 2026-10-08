@@ -59,6 +59,12 @@ export abstract class ListEndpoint<
   protected defaultSort?: SortSpec;
 
   // Pagination configuration
+  /**
+   * Whether `page` / `per_page` are query params. An endpoint that reads
+   * every matching row (export) turns it off so it neither advertises nor
+   * validates params it would ignore.
+   */
+  protected offsetPaginationEnabled = true;
   protected defaultPerPage = 20;
   protected maxPerPage = 100;
 
@@ -141,9 +147,9 @@ export abstract class ListEndpoint<
    */
   protected getQuerySchema(): ZodObject<ZodRawShape> {
     // Use Record for mutable shape building (ZodRawShape is readonly in Zod v4)
-    const shape: Record<string, z.ZodTypeAny> = {
-      ...pagingQueryShape(this.defaultPerPage, this.maxPerPage),
-    };
+    const shape: Record<string, z.ZodTypeAny> = this.offsetPaginationEnabled
+      ? pagingQueryShape(this.defaultPerPage, this.maxPerPage)
+      : {};
 
     if (this.sortFields.length > 0) {
       Object.assign(shape, sortQueryShape(this.sortFields, this.defaultSort));
@@ -248,19 +254,10 @@ export abstract class ListEndpoint<
   }
 
   /**
-   * The query `getFilters` parses. Export narrows it to drop the paging
-   * params it ignores.
-   */
-  protected async getFilterQuery(): Promise<Record<string, unknown>> {
-    const { query } = await this.getValidatedData();
-    return query ?? {};
-  }
-
-  /**
    * Parses query parameters into list filters.
    */
   protected async getFilters(): Promise<ListFilters> {
-    const query = await this.getFilterQuery();
+    const { query } = await this.getValidatedData();
     const softDeleteConfig = this.getSoftDeleteConfig();
 
     const config: ListFilterParseOptions = {
@@ -272,6 +269,7 @@ export abstract class ListEndpoint<
       defaultSort: this.defaultSort,
       defaultPerPage: this.defaultPerPage,
       maxPerPage: this.maxPerPage,
+      offsetPaginationEnabled: this.offsetPaginationEnabled,
       cursorPaginationEnabled: this.isCursorPaginationActive(),
       cursorField: this.cursorField,
       softDeleteQueryParam: softDeleteConfig.queryParam,
@@ -286,7 +284,7 @@ export abstract class ListEndpoint<
       fieldSchemas: this.getModelSchema().shape,
     };
 
-    return parseListFilters(query, config);
+    return parseListFilters(query || {}, config);
   }
 
   /**

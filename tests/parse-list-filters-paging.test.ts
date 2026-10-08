@@ -145,6 +145,21 @@ describe('export endpoint mounted without the route validator', () => {
   });
 });
 
+class NoPagingQueryExport extends BareItemExport {
+  protected override getQuerySchema() {
+    return z.object({ name: z.string().optional() });
+  }
+}
+
+describe('export endpoint whose query schema has no paging params', () => {
+  it('exports instead of failing on the missing page/per_page keys', async () => {
+    const app = fromHono(new Hono());
+    registerCrud(app, '/items', { export: NoPagingQueryExport as never });
+    const response = await app.request('/items/export');
+    expect(response.status).toBe(200);
+  });
+});
+
 class ItemVersions extends MemoryVersionHistoryEndpoint<Record<string, never>, ItemMeta> {
   _meta = itemMeta;
 }

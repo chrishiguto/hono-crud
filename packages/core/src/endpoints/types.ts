@@ -50,6 +50,11 @@ export interface ListFilterParseOptions {
   defaultSort?: SortSpec;
 
   // Pagination configuration
+  /**
+   * `false` for an endpoint that never offset-pages: `page` / `per_page` are
+   * then neither parsed nor treated as filters. @default true
+   */
+  offsetPaginationEnabled?: boolean;
   defaultPerPage?: number;
   maxPerPage?: number;
 
@@ -281,6 +286,7 @@ export function parseListFilters(
     defaultSort,
     defaultPerPage = 20,
     maxPerPage = 100,
+    offsetPaginationEnabled = true,
     cursorPaginationEnabled = false,
     cursorField,
     softDeleteQueryParam = 'withDeleted',
@@ -305,7 +311,7 @@ export function parseListFilters(
   // one mounted without the route validator hands over raw strings that get
   // the same bounds, defaults and 400 instead of a silent clamp.
   const pagingShape = {
-    ...pagingQueryShape(defaultPerPage, maxPerPage),
+    ...(offsetPaginationEnabled ? pagingQueryShape(defaultPerPage, maxPerPage) : {}),
     ...(cursorPaginationEnabled ? { limit: boundedPageSize(maxPerPage).optional() } : {}),
   };
   const paging = z.object(pagingShape).safeParse(query);
@@ -315,7 +321,7 @@ export function parseListFilters(
   for (const [key, rawValue] of Object.entries(query)) {
     if (rawValue === undefined || rawValue === null) continue;
     // Own keys only: `in` would also match `constructor`, `valueOf`, ...
-    if (Object.hasOwn(pagingShape, key)) continue;
+    if (key === 'page' || key === 'per_page' || Object.hasOwn(pagingShape, key)) continue;
 
     const value = String(rawValue);
 
