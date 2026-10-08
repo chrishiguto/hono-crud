@@ -222,10 +222,7 @@ export abstract class AggregateEndpoint<
     const kept: Record<string, unknown> = {};
     for (const [field, raw] of Object.entries(filters)) {
       if (!allowed.includes(field)) continue;
-      const value = coerceFilterValue('eq', String(raw), field, modelShape[field]);
-      // Adapters read an object filter value as `{ operator: value }`, so a
-      // bare `Date` (a date field) would match every row; spell it as `eq`.
-      kept[field] = typeof value === 'object' && value !== null ? { eq: value } : value;
+      kept[field] = { eq: coerceFilterValue('eq', String(raw), field, modelShape[field]) };
     }
     return Object.keys(kept).length > 0 ? kept : undefined;
   }
