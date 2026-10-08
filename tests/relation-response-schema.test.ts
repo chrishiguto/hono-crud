@@ -247,6 +247,20 @@ describe('withIncludableRelations OpenAPI emission', () => {
     });
   }
 
+  // `getSchema()` runs on every request (getValidatedData), and each
+  // `.openapi(id)` / `.extend()` pins a new entry in zod-to-openapi's strong
+  // registry, so a fresh schema per call is a leak.
+  it('documents the same item schema on every getSchema() call', () => {
+    const read = new CommentRead();
+    const item = (schema: { responses?: Record<number, unknown> }) => {
+      const ok = schema.responses?.[200] as {
+        content: { 'application/json': { schema: z.ZodObject } };
+      };
+      return ok.content['application/json'].schema.shape.result;
+    };
+    expect(item(read.getSchema())).toBe(item(read.getSchema()));
+  });
+
   it('stays one flat object in Zod JSON Schema (MCP outputSchema)', () => {
     const item = withIncludableRelations(CommentRow, commentMeta, ['post']);
     const json = z.toJSONSchema(item, { io: 'output' }) as Schema;

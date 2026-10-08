@@ -1,6 +1,14 @@
 import { type ZodObject, type ZodRawShape, z } from 'zod';
 
-import type { MetaInput, RelationConfig } from '../core/types';
+import type { MetaInput, RelationConfig, RelationsConfig } from '../core/types';
+
+/**
+ * One result per (item schema, relations, allowed includes). `getSchema()` runs
+ * on every request, and each `.openapi(id)` and patched `.extend()` pins a new
+ * entry in zod-to-openapi's strong registry, so a fresh schema per call leaks.
+ */
+type ByIncludes = Map<string, ZodObject<ZodRawShape>>;
+const extended = new WeakMap<ZodObject<ZodRawShape>, WeakMap<RelationsConfig, ByIncludes>>();
 
 /**
  * Extend a List/Read/Search/Export response **item** schema with the model's
@@ -36,6 +44,15 @@ export function withIncludableRelations(
   const relations = meta.model.relations;
   if (!relations || allowedIncludes.length === 0) return itemSchema;
 
+  const byRelations: WeakMap<RelationsConfig, ByIncludes> =
+    extended.get(itemSchema) ?? new WeakMap();
+  extended.set(itemSchema, byRelations);
+  const byIncludes: ByIncludes = byRelations.get(relations) ?? new Map();
+  byRelations.set(relations, byIncludes);
+  const key = allowedIncludes.join(',');
+  const cached = byIncludes.get(key);
+  if (cached) return cached;
+
   // Use Record for mutable shape building (ZodRawShape is readonly in Zod v4).
   const extension: Record<string, z.ZodTypeAny> = {};
   for (const name of allowedIncludes) {
@@ -47,9 +64,10 @@ export function withIncludableRelations(
         ? z.array(relationSchema).optional()
         : nullableRelation(relationSchema).optional();
   }
-  if (Object.keys(extension).length === 0) return itemSchema;
-
-  return extendableBase(itemSchema).extend(extension);
+  const result =
+    Object.keys(extension).length === 0 ? itemSchema : extendableBase(itemSchema).extend(extension);
+  byIncludes.set(key, result);
+  return result;
 }
 
 /**
