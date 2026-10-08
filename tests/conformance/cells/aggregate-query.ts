@@ -12,6 +12,8 @@
  *   before paging;
  * - `?orderBy=` sorts groups by an aggregate alias or a group key before
  *   paging (prisma's native `groupBy` included);
+ * - `?count=<field>` counts non-null values under the `count<Field>` alias
+ *   on every adapter, so `?orderBy=count<Field>` can sort by it;
  * - a non-integer or zero limit is `400 VALIDATION_ERROR`, one above `maxLimit` is
  *   `400 AGGREGATION_ERROR`;
  * - `?withDeleted=true` counts soft-deleted rows, `=false` (or absent) does
@@ -19,7 +21,7 @@
  */
 import { expect, test } from 'vitest';
 import type { AdapterDescriptor, ConformanceRecord, CtxGetter } from '../contract';
-import { expectError, expectSuccess } from '../contract';
+import { createRecord, expectError, expectSuccess } from '../contract';
 import { seedFilterRows } from '../model';
 
 interface AggregateBody {
@@ -65,6 +67,33 @@ export function registerAggregateQueryCells(_descriptor: AdapterDescriptor, ctx:
     // Group keys sort admin < guest < user.
     expect(await firstRole('&orderBy=role&orderDirection=desc')).toBe('user');
     expect(await firstRole('&orderBy=role&offset=1')).toBe('guest');
+  });
+
+  test('aggregate: ?count=<field> is keyed count<Field>, skips nulls, and sorts groups', async () => {
+    const { app } = ctx();
+    await seedFilterRows(app, '/items');
+    // user ends with 3 rows and 3 ages, guest with 4 rows and 2 ages, so
+    // counting rows instead of ages would put guest on top.
+    for (const [name, role, age] of [
+      ['Erin', 'user', 30],
+      ['Finn', 'guest', null],
+      ['Gail', 'guest', null],
+    ] as const) {
+      await createRecord(app, '/items', {
+        name,
+        email: `${name.toLowerCase()}@conformance.test`,
+        role,
+        age,
+      });
+    }
+
+    const body = await expectSuccess<AggregateBody>(
+      await app.request(
+        '/items/aggregate?count=age&groupBy=role&orderBy=countAge&orderDirection=desc&limit=1',
+      ),
+      200,
+    );
+    expect(body.groups).toEqual([{ key: { role: 'user' }, values: { countAge: 3 } }]);
   });
 
   test('aggregate: a malformed or zero limit is 400 VALIDATION_ERROR, one above maxLimit is 400 AGGREGATION_ERROR', async () => {
