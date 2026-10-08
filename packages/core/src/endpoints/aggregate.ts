@@ -110,14 +110,6 @@ export abstract class AggregateEndpoint<
   }
 
   /**
-   * Get the soft delete configuration for this model.
-   */
-
-  /**
-   * Check if soft delete is enabled for this model.
-   */
-
-  /**
    * Get normalized aggregate configuration with defaults.
    */
   protected getAggregateConfig(): Required<AggregateConfig> {
@@ -158,7 +150,7 @@ export abstract class AggregateEndpoint<
 
     // Reserved params win over a model field of the same name (the parser
     // consumes them before filters are collected).
-    const filterFields = this.getFilterableFields().filter((field) => !(field in shape));
+    const filterFields = this.getFilterableFields().filter((field) => !Object.hasOwn(shape, field));
     this.addFilterParams(shape, filterFields);
 
     return z.object(shape).passthrough() as unknown as ZodObject<ZodRawShape>;
