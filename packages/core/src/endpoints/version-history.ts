@@ -114,7 +114,7 @@ export abstract class VersionHistoryEndpoint<
   protected getQuerySchema(): ZodObject<ZodRawShape> {
     return z.object({
       limit: boundedPageSize(this.maxLimit).optional(),
-      offset: z.coerce.number().min(0).optional(),
+      offset: z.coerce.number().int().min(0).optional(),
     }) as unknown as ZodObject<ZodRawShape>;
   }
 

@@ -5,7 +5,7 @@ import {
   getStore,
 } from '@hono-crud/memory';
 import { Hono } from 'hono';
-import { InputValidationException, parseListFilters } from 'hono-crud';
+import { InputValidationException, fromHono, parseListFilters, registerCrud } from 'hono-crud';
 import type { MetaInput, Model } from 'hono-crud';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -157,5 +157,19 @@ describe('version history query schema', () => {
       minimum: 1,
       maximum: 100,
     });
+  });
+
+  it('refuses fractional limit and offset on a mounted route', async () => {
+    class VersionedItemVersions extends ItemVersions {
+      _meta = { model: { ...itemMeta.model, versioning: true } };
+    }
+    const app = fromHono(new Hono());
+    registerCrud(app, '/items', { versionHistory: VersionedItemVersions as never });
+    for (const query of ['limit=2.5', 'offset=2.5']) {
+      const response = await app.request(`/items/${crypto.randomUUID()}/versions?${query}`);
+      expect(response.status, query).toBe(400);
+      const body = (await response.json()) as { error: { code: string } };
+      expect(body.error.code, query).toBe('VALIDATION_ERROR');
+    }
   });
 });
