@@ -294,6 +294,15 @@ describe('withIncludableRelations OpenAPI emission', () => {
     );
   });
 
+  it('keeps the $ref on a loose row, whose component accepts the relations', () => {
+    const row = z.looseObject({ id: z.string() }).meta({ id: 'IncludeLooseRow' });
+    const schema = emitItem(withIncludableRelations(row, commentMeta, ['post']));
+    expect(schema.allOf).toEqual([
+      { $ref: '#/components/schemas/IncludeLooseRow' },
+      expect.objectContaining({ properties: { post: expect.any(Object) } }),
+    ]);
+  });
+
   it('inlines a row built on a Zod copy @hono/zod-openapi did not extend', () => {
     // The CommonJS build is a second Zod instance: its schemas have no `.openapi`.
     const otherZod = createRequire(import.meta.url)('zod') as typeof z;

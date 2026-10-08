@@ -91,7 +91,8 @@ function nullableRelation(schema: ZodObject<ZodRawShape>): z.ZodType {
  *   - the row must be named (`.meta({ id })`), or there is no component to reference;
  *   - no relation may share a row field's name: `.extend()` overrides the field,
  *     `allOf` intersects it (`post: string & (Post | null)`), which no row satisfies;
- *   - the row must be open (no catchall): a `z.strictObject` component's
+ *   - the row must accept extra fields (no catchall, or an `unknown`/`any` one as
+ *     `z.looseObject` / `.passthrough()` set): a `z.strictObject` component's
  *     `additionalProperties: false` rejects the relation fields (and the strict
  *     relation branch rejects the row's own), and a `.catchall(T)` one
  *     requires every relation to match `T` — every such row would fail the doc;
@@ -103,10 +104,11 @@ function extendableBase(
   extension: Record<string, z.ZodTypeAny>,
 ): ZodObject<ZodRawShape> {
   const id = itemSchema.meta()?.id;
+  const catchall = itemSchema.def.catchall?._zod.def.type;
   const composable =
     typeof id === 'string' &&
     !Object.keys(extension).some((name) => name in itemSchema.shape) &&
-    itemSchema.def.catchall === undefined &&
+    (catchall === undefined || catchall === 'unknown' || catchall === 'any') &&
     typeof itemSchema.openapi === 'function';
   return composable ? itemSchema.openapi(id) : itemSchema;
 }
