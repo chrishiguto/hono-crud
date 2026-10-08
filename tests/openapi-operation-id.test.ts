@@ -285,6 +285,46 @@ describe('defaultOperationId naming rules', () => {
     ).toEqual(['category', 'address', 'box', 'match', 'status', 'analysis', 'people', 'news']);
   });
 
+  it('singularizes the plurals the suffix rules get wrong, including in compounds', () => {
+    const irregular = {
+      movies: 'movie',
+      cookies: 'cookie',
+      calories: 'calorie',
+      caches: 'cache',
+      statuses: 'status',
+      aliases: 'alias',
+      buses: 'bus',
+      bonuses: 'bonus',
+      campuses: 'campus',
+      viruses: 'virus',
+      analyses: 'analysis',
+      diagnoses: 'diagnosis',
+      quizzes: 'quiz',
+      indices: 'index',
+      vertices: 'vertex',
+      matrices: 'matrix',
+      menus: 'menu',
+      skus: 'sku',
+      cpus: 'cpu',
+      gpus: 'gpu',
+      apis: 'api',
+      uris: 'uri',
+      kpis: 'kpi',
+      emojis: 'emoji',
+      wikis: 'wiki',
+    };
+    const plurals = Object.keys(irregular);
+    expect(Object.fromEntries(plurals.map((word) => [word, singularize(word)]))).toEqual(irregular);
+    expect(['OrderStatuses', 'order-statuses', 'Abuses', 'UserNews'].map(singularize)).toEqual([
+      'OrderStatus',
+      'order-status',
+      'Abuse',
+      'UserNews',
+    ]);
+    expect(defaultOperationId('read', '/movies')).toBe('getMovie');
+    expect(defaultOperationId('list', '/menus/:menuId/menu-items')).toBe('listMenuMenuItems');
+  });
+
   it('camelCases kebab and snake segments and ignores param syntax', () => {
     expect(defaultOperationId('read', '/user-profiles')).toBe('getUserProfile');
     expect(defaultOperationId('list', '/user_settings')).toBe('listUserSettings');

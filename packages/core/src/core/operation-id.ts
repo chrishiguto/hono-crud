@@ -104,13 +104,52 @@ const VERBS = {
 const INVARIANT = new Set(['news', 'series', 'species']);
 
 /**
+ * Common REST plurals the suffix rules below get wrong (`movies` → `movy`,
+ * `statuses` → `statuse`, `menus` kept plural). Each singular starts with its
+ * plural's first letter, so the plural's casing of that letter carries over.
+ */
+const IRREGULAR = new Map([
+  ['movies', 'movie'],
+  ['cookies', 'cookie'],
+  ['calories', 'calorie'],
+  ['caches', 'cache'],
+  ['statuses', 'status'],
+  ['aliases', 'alias'],
+  ['buses', 'bus'],
+  ['bonuses', 'bonus'],
+  ['campuses', 'campus'],
+  ['viruses', 'virus'],
+  ['analyses', 'analysis'],
+  ['diagnoses', 'diagnosis'],
+  ['quizzes', 'quiz'],
+  ['indices', 'index'],
+  ['vertices', 'vertex'],
+  ['matrices', 'matrix'],
+  ['menus', 'menu'],
+  ['skus', 'sku'],
+  ['cpus', 'cpu'],
+  ['gpus', 'gpu'],
+  ['apis', 'api'],
+  ['uris', 'uri'],
+  ['kpis', 'kpi'],
+  ['emojis', 'emoji'],
+  ['wikis', 'wiki'],
+]);
+
+/**
  * Frozen English singularizer — deliberately small, see the module note.
  * `categories` → `category`, `addresses` → `address`, `boxes` → `box`,
  * `status` → `status`, `comments` → `comment`; `people` stays `people`.
+ * The word lists match the last word of a compound (`OrderStatuses`,
+ * `order-statuses` → `OrderStatus`, `order-status`).
  */
 export function singularize(word: string): string {
+  const last = /[A-Z]?[a-z0-9]*$/.exec(word)?.[0] ?? '';
+  const lastLower = last.toLowerCase();
+  if (INVARIANT.has(lastLower)) return word;
+  const irregular = IRREGULAR.get(lastLower);
+  if (irregular) return `${word.slice(0, -last.length)}${last[0]}${irregular.slice(1)}`;
   const lower = word.toLowerCase();
-  if (INVARIANT.has(lower)) return word;
   if (lower.endsWith('ies') && lower.length > 3) return `${word.slice(0, -3)}y`;
   if (/(sses|xes|ches|shes)$/.test(lower)) return word.slice(0, -2);
   if (/(ss|us|is)$/.test(lower)) return word;
