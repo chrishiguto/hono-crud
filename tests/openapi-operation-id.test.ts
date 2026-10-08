@@ -205,6 +205,25 @@ describe('operationIds naming function', () => {
     });
     expect((paths['/comments']?.get as Operation).operationId).toBe('get_list');
   });
+
+  it('gets the same context from toOpenApiPaths as from fromHono, with the base path normalized', () => {
+    const fromApp: OperationIdContext[] = [];
+    registerCrud(
+      newApp({ operationIds: (ctx) => void fromApp.push(ctx) }),
+      '/users',
+      commentEndpoints(),
+    );
+    const fromPaths: OperationIdContext[] = [];
+    toOpenApiPaths(commentEndpoints(), {
+      basePath: 'users/',
+      operationIds: (ctx) => void fromPaths.push(ctx),
+    });
+    expect(fromPaths).toEqual(fromApp);
+    expect(fromPaths.find((ctx) => ctx.operation === 'read')).toMatchObject({
+      path: '/users/:id',
+      basePath: '/users',
+    });
+  });
 });
 
 describe('toOpenApiPaths operationId', () => {

@@ -120,7 +120,10 @@ export function toOpenApiPaths(
   endpoints: GeneratedEndpoints,
   options: ToOpenApiPathsOptions = {},
 ): Record<string, OpenApiPathItem> {
-  const basePath = options.basePath ?? '';
+  // Same shape `registerCrud` registers (`/users`, `''` for the root), so the
+  // operationId inputs match it.
+  const normalizedBase = normalizePath(options.basePath ?? '', '');
+  const basePath = normalizedBase === '/' ? '' : normalizedBase;
   const tagOverride = options.tag;
 
   // Accumulate every generated route on a throwaway OpenAPIHono, then ask
@@ -151,10 +154,11 @@ export function toOpenApiPaths(
     // default tags into the raw `.schema` field, so reading `getSchema()`
     // directly would drop them. An explicit per-endpoint tag still wins.
     const instance = new EndpointClass();
+    const routePath = normalizePath(basePath, subPath);
     const schema = declareBasePathParams(
       applyDefaultOperationId(
         resolveInstanceSchemaTags(instance),
-        { operation: name, basePath },
+        { operation: name, method, path: routePath, basePath },
         instanceModel(instance),
         options.operationIds,
       ),
@@ -166,7 +170,7 @@ export function toOpenApiPaths(
 
     // Convert the base path too: the declared base-path params only match a
     // `{noteId}` template, never a literal `:noteId` segment.
-    const path = toOpenApiPath(normalizePath(basePath, subPath));
+    const path = toOpenApiPath(routePath);
 
     const routeConfig = createRoute({
       // `OpenAPIRouteSchema` is a structural subset of zod-openapi's

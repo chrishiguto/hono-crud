@@ -6,6 +6,7 @@ import { ApiException } from './exceptions';
 import { instanceModel, resolveInstanceSchemaTags } from './generate-endpoint-class';
 import {
   type CrudRouteHint,
+  type OperationIdContext,
   type OperationIdsOption,
   applyDefaultOperationId,
 } from './operation-id';
@@ -188,8 +189,14 @@ export class HonoOpenAPIHandler<E extends Env = Env> {
     // wins, and instances with no `_meta` pass through untouched. Doc-only:
     // the validation path (`getValidatedData`) is unaffected.
     const tagged = resolveInstanceSchemaTags(instance);
+    // `crud` comes only from `registerCrud`, whose routes use the CRUD verbs.
     const named = crud
-      ? applyDefaultOperationId(tagged, crud, instanceModel(instance), this.options.operationIds)
+      ? applyDefaultOperationId(
+          tagged,
+          { ...crud, method: method as OperationIdContext['method'], path },
+          instanceModel(instance),
+          this.options.operationIds,
+        )
       : tagged;
     // Any id the endpoint didn't set explicitly was generated (default or naming function).
     this.claimOperationId(routeKey, named.operationId, tagged.operationId === undefined);

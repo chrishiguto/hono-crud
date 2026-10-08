@@ -29,7 +29,7 @@
  * the prefix to keep it out.
  */
 
-import { CRUD_ROUTES, type CrudEndpointName } from './crud-routes';
+import type { CRUD_ROUTES, CrudEndpointName } from './crud-routes';
 import type { OpenAPIRouteSchema } from './types';
 
 /** What a custom {@link OperationIdsOption} naming function receives. */
@@ -206,8 +206,6 @@ export function defaultOperationId(
   return resource ? `${verb}${resource}${suffix}` : undefined;
 }
 
-const ROUTES = new Map(CRUD_ROUTES.map(([name, method, subPath]) => [name, { method, subPath }]));
-
 /**
  * Apply the default (or strategy-named) `operationId` to an endpoint's
  * resolved schema. An explicit `schema.operationId` always wins;
@@ -215,19 +213,12 @@ const ROUTES = new Map(CRUD_ROUTES.map(([name, method, subPath]) => [name, { met
  */
 export function applyDefaultOperationId(
   schema: OpenAPIRouteSchema,
-  hint: CrudRouteHint,
+  route: Pick<OperationIdContext, 'operation' | 'method' | 'path' | 'basePath'>,
   model: { tableName: string; tag?: string } | undefined,
   option: OperationIdsOption | undefined,
 ): OpenAPIRouteSchema {
   if (schema.operationId !== undefined || option === false) return schema;
-  const { operation, basePath } = hint;
-  const defaultId = defaultOperationId(operation, basePath, model?.tableName);
-  let operationId = defaultId;
-  if (option) {
-    const route = ROUTES.get(operation);
-    if (!route) return schema;
-    const path = `${basePath}${route.subPath}`;
-    operationId = option({ operation, method: route.method, path, basePath, model, defaultId });
-  }
+  const defaultId = defaultOperationId(route.operation, route.basePath, model?.tableName);
+  const operationId = option ? option({ ...route, model, defaultId }) : defaultId;
   return operationId === undefined ? schema : { ...schema, operationId };
 }
