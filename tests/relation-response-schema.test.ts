@@ -286,6 +286,14 @@ describe('withIncludableRelations OpenAPI emission', () => {
     );
   });
 
+  // allOf intersects a row field with the relation of the same name
+  // (`post: string & (Post | null)`), which no row satisfies.
+  it('inlines a row whose field shares a relation name', () => {
+    inlinesWithPost(
+      z.object({ id: z.string(), post: z.string() }).meta({ id: 'IncludeShadowRow' }),
+    );
+  });
+
   it('inlines a row built on a Zod copy @hono/zod-openapi did not extend', () => {
     // The CommonJS build is a second Zod instance: its schemas have no `.openapi`.
     const otherZod = createRequire(import.meta.url)('zod') as typeof z;
