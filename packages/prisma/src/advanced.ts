@@ -636,9 +636,15 @@ export abstract class PrismaAggregateEndpoint<
     const model = await this.getModel();
     const where = await this.buildAggregateWhere(options);
 
-    // Fall back to in-memory computation if native aggregation is disabled
-    // or if there are HAVING clauses (not supported by Prisma aggregate)
-    if (!this.useNativeAggregation || options.having) {
+    // Fall back to in-memory computation if native aggregation is disabled,
+    // for HAVING clauses (not supported by Prisma aggregate), and for field
+    // counts / countDistinct, which the native mapping reports only as the
+    // row `count` instead of `count<Field>` / `countDistinct<Field>`.
+    const hasFieldCount = options.aggregations.some(
+      (agg) =>
+        agg.operation === 'countDistinct' || (agg.operation === 'count' && agg.field !== '*'),
+    );
+    if (!this.useNativeAggregation || options.having || hasFieldCount) {
       const records = await model.findMany({ where });
       return computeAggregations(records, options);
     }
