@@ -6,9 +6,10 @@
  * description, and component id stay off the param — a leaked `.default()`
  * would filter every request that omits it.
  */
-import { clearStorage, createMemoryCrud } from '@hono-crud/memory';
+import { clearStorage, createMemoryCrud, getStore } from '@hono-crud/memory';
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { defineMeta, defineModel, fromHono, registerCrud } from 'hono-crud';
+import { buildPerTenantOpenApi, defineMeta, defineModel, fromHono, registerCrud } from 'hono-crud';
+import { multiTenant } from 'hono-crud/multi-tenant';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -130,6 +131,49 @@ describe('filter params typed from the model field', () => {
         const body = (await res.json()) as { success: boolean; error: { code: string } };
         expect(body).toMatchObject({ success: false, error: { code: 'VALIDATION_ERROR' } });
       }
+    });
+  });
+
+  describe('with resolveSchema', () => {
+    const StaticTask = z.object({ id: z.string(), status: z.enum(['draft', 'published']) });
+    const ExtTask = StaticTask.extend({ status: z.enum(['draft', 'published', 'archived']) });
+    const Tasks = createMemoryCrud(
+      defineMeta({
+        model: defineModel({
+          tableName: 'filter_param_tasks',
+          schema: StaticTask,
+          primaryKeys: ['id'],
+          resolveSchema: (ctx) => (ctx.tenantId === 'ext' ? ExtTask : StaticTask),
+        }),
+      }),
+    );
+    class TaskList extends Tasks.List {
+      filterFields = ['status'];
+    }
+    const honoApp = new OpenAPIHono();
+    honoApp.use('/*', multiTenant({ contextKey: 'tenantId' }));
+    const app = fromHono(honoApp);
+    registerCrud(app, '/tasks', { list: TaskList });
+    const ext = { 'X-Tenant-ID': 'ext' };
+
+    beforeEach(() => {
+      clearStorage();
+      getStore('filter_param_tasks').set('t1', { id: 't1', status: 'archived' });
+    });
+
+    it('accepts a member only the tenant schema adds, as its per-tenant doc allows', async () => {
+      const res = await app.request('/tasks?status=archived', { headers: ext });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { result: { status: string }[] };
+      expect(body.result.map((t) => t.status)).toEqual(['archived']);
+
+      const doc = (await buildPerTenantOpenApi(app, { tenantId: 'ext' })) as unknown as DocShape;
+      expect(filterParams(doc, '/tasks')).toEqual({ status: { type: 'string' } });
+    });
+
+    it('still rejects a typo against the resolved schema', async () => {
+      const res = await app.request('/tasks?status=archivd', { headers: ext });
+      expect(res.status).toBe(400);
     });
   });
 });

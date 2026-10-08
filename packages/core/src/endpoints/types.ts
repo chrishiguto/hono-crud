@@ -174,8 +174,8 @@ function filterValueForm(operator: FilterOperator): FilterValueForm {
  * The members a `?field[operator]=` value must be one of: a string `z.enum` /
  * `z.literal` field's members when the operator takes a single value, else
  * `undefined`. Shares the operator split and the resolver the filter
- * coercion uses, so a documented enum param and the runtime membership check
- * can never disagree.
+ * coercion uses, so for one field schema a documented enum param and the
+ * runtime membership check can never disagree.
  */
 export function filterEnumValues(
   operator: FilterOperator,

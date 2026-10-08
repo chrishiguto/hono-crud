@@ -838,8 +838,10 @@ export abstract class CrudEndpoint<
    * The enum is rebuilt from its members instead of reusing the field schema,
    * so the field's `.default()` (which zod would apply to an absent param,
    * silently filtering every request), description, and component id never
-   * reach the param. The validator sees the static `Model.schema`: with
-   * `resolveSchema`, members only a tenant's schema adds are rejected here.
+   * reach the param. With `resolveSchema` the params stay strings: the
+   * validator is built from the static `Model.schema` while a per-tenant doc
+   * comes from the resolved one, so neither enum would fit both. The runtime
+   * coercion still rejects a typo against the resolved schema.
    */
   protected addFilterParams(
     shape: Record<string, z.ZodTypeAny>,
@@ -848,7 +850,9 @@ export abstract class CrudEndpoint<
   ): void {
     const modelShape: Record<string, unknown> = this.getModelSchema().shape;
     const param = (field: string, operator: FilterOperator): z.ZodTypeAny => {
-      const members = filterEnumValues(operator, modelShape[field]);
+      const members = this._meta.model.resolveSchema
+        ? undefined
+        : filterEnumValues(operator, modelShape[field]);
       return members ? z.enum(members).optional() : z.string().optional();
     };
 

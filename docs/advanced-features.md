@@ -1220,7 +1220,9 @@ reach the database: numbers, booleans, and dates are converted, and a string
 The OpenAPI document types the params the same way: the single-value params
 (`?status=` and `?status[ne]=`, plus `gt`, `gte`, `lt`, and `lte`) list the
 enum members (so a generated client types them as the union), while `in`,
-`nin`, `between`, `like`, `ilike`, and `null` params stay strings.
+`nin`, `between`, `like`, `ilike`, and `null` params stay strings. On a
+model with `resolveSchema` every filter param stays a string, since the
+validator and a per-tenant document see different schemas.
 
 ---
 
